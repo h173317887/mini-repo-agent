@@ -88,12 +88,13 @@ def execute_tool(name: str, raw_arguments: str) -> str:
 
 
 def run_agent(task: str) -> str:
-    if not os.getenv("OPENAI_API_KEY"):
-        raise SystemExit("请先设置 OPENAI_API_KEY 环境变量")
-    model = os.getenv("OPENAI_MODEL", "gpt-4.1-mini")
+    if not os.getenv("DEEPSEEK_API_KEY"):
+        raise SystemExit("请先设置 DEEPSEEK_API_KEY 环境变量")
+    model = os.getenv("DEEPSEEK_MODEL", "deepseek-flash")
+    # DeepSeek 兼容 OpenAI Python SDK；实际请求发往 DeepSeek，而非 OpenAI。
     client = OpenAI(
-        api_key=os.environ["OPENAI_API_KEY"],
-        base_url=os.getenv("OPENAI_BASE_URL") or None,
+        api_key=os.environ["DEEPSEEK_API_KEY"],
+        base_url=os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com"),
     )
     messages = [
         {"role": "system", "content": "你是一个只读代码分析助手。需要事实时先用工具检查文件；不得猜测文件内容。只能使用提供的工具。"},
@@ -103,7 +104,11 @@ def run_agent(task: str) -> str:
     for step in range(1, MAX_STEPS + 1):
         print(f"\n[第 {step} 轮] 调用模型 {model}")
         response = client.chat.completions.create(
-            model=model, messages=messages, tools=TOOL_SCHEMAS
+            model=model,
+            messages=messages,
+            tools=TOOL_SCHEMAS,
+            # 入门先使用非思考模式，避免额外处理 reasoning_content 的回传。
+            extra_body={"thinking": {"type": "disabled"}},
         )
         message = response.choices[0].message
         calls = message.tool_calls or []
