@@ -14,24 +14,27 @@ cd mini-repo-agent
 uv sync
 ```
 
-## 2. 配置 DeepSeek
+## 2. 配置 DeepSeek（.env）
 
-在终端设置 API Key：
-
-```bash
-export DEEPSEEK_API_KEY='替换为你自己的 DeepSeek API Key'
-```
-
-默认模型为 **`deepseek-flash`**，默认 API 地址为 `https://api.deepseek.com`，因此无需配置其他环境变量。如需显式指定：
+首次运行时复制配置模板：
 
 ```bash
-export DEEPSEEK_MODEL='deepseek-flash'
-export DEEPSEEK_BASE_URL='https://api.deepseek.com'
+cp .env.example .env
 ```
 
-目前为了方便学习 ReAct，代码显式采用 DeepSeek **非思考模式**。以后学习上下文工程时可以再研究思考模式下 `reasoning_content` 的正确回传方式。
+打开项目根目录的 `.env`，填入从 [DeepSeek 开放平台](https://platform.deepseek.com/) 申请的 API Key：
 
-**不要把真实 API Key 写进代码、README 或提交到 Git。**
+```dotenv
+DEEPSEEK_API_KEY=你的真实API密钥
+DEEPSEEK_MODEL=deepseek-flash
+DEEPSEEK_BASE_URL=https://api.deepseek.com
+```
+
+项目使用 `python-dotenv`，`agent.py` 启动时会从**项目文件所在目录**自动读取 `.env`，无须每次 `export`。终端里已有的同名环境变量优先于 `.env` 配置。
+
+`.env` 已加入 `.gitignore`，不会被正常的 `git add .` 提交；仓库只保存不含真实密钥的 `.env.example`。**如果曾手动强制追踪密钥文件，忽略规则不会自动移除追踪。不要将密钥提交到 Git。**
+
+默认使用 DeepSeek `deepseek-flash` 的**非思考模式**，便于专注学习 ReAct，后续再研究思考模式的上下文处理。
 
 ## 3. 运行 Agent
 
