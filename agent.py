@@ -4,6 +4,7 @@ import os
 import sys
 from pathlib import Path
 
+from dotenv import load_dotenv
 from openai import OpenAI
 
 ROOT = (Path(__file__).parent / "workspace").resolve()
@@ -88,8 +89,10 @@ def execute_tool(name: str, raw_arguments: str) -> str:
 
 
 def run_agent(task: str) -> str:
+    # 从项目根目录读取 .env；已经存在的进程环境变量优先。
+    load_dotenv(Path(__file__).resolve().parent / ".env")
     if not os.getenv("DEEPSEEK_API_KEY"):
-        raise SystemExit("请先设置 DEEPSEEK_API_KEY 环境变量")
+        raise SystemExit("未找到 DEEPSEEK_API_KEY，请复制 .env.example 为 .env 并填入真实密钥")
     model = os.getenv("DEEPSEEK_MODEL", "deepseek-flash")
     # DeepSeek 兼容 OpenAI Python SDK；实际请求发往 DeepSeek，而非 OpenAI。
     client = OpenAI(
