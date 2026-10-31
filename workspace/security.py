@@ -18,3 +18,5 @@ def delete_document(role: str, doc_id: str) -> str:
         raise PermissionError(f"{role!r} cannot delete document {doc_id}")
     # Demo only; no data is actually deleted.
     return f"Would delete {doc_id}"
+
+AUDIT_MARKER = "K7mQ-92xP-4BzR"

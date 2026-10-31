@@ -10,7 +10,7 @@ from openai import OpenAI
 
 ROOT = (Path(__file__).parent / "workspace").resolve()
 ALLOWED_EXTENSIONS = {".py", ".md", ".txt", ".json", ".toml"}
-MAX_STEPS = 6
+MAX_STEPS = 10
 
 
 def safe_path(relative_path: str) -> Path:
@@ -96,10 +96,22 @@ def execute_tool(name: str, raw_arguments: str) -> str:
 
 
 def compact_old_tool_results(messages: list, read_refs: dict, current_step: int):
+
+    latest_by_path = {}
+
+    for call_id, (path, executed_step) in read_refs.items():
+        latest_by_path[path] = call_id
+
+    keep_ids = set(latest_by_path.values())
+
+
     for msg in messages:
         if msg["role"] != "tool":
             continue
 
+        if msg["tool_call_id"] in keep_ids:
+            continue
+        
         info = read_refs.get(msg["tool_call_id"])
         if info is None:
             continue
@@ -150,12 +162,12 @@ def run_agent(task: str) -> str:
         },
         {"role": "user", "content": task},
     ]
-
+    read_refs = {}
     for step in range(1, MAX_STEPS + 1):
         print(f"\n[第 {step} 轮] 调用模型 {model}")
         print(f"[Context] 当前消息数量：{len(messages)}")
 
-        read_refs = {}
+     
         compact_old_tool_results(messages, read_refs, step)
 
         response = client.chat.completions.create(
