@@ -1,4 +1,5 @@
 """A minimal, read-only ReAct coding agent (no LangChain)."""
+
 import json
 import os
 import sys
@@ -56,7 +57,11 @@ TOOL_SCHEMAS = [
         "function": {
             "name": "list_files",
             "description": "列出 workspace 目录下可读取的文件路径。调用时不需要参数。",
-            "parameters": {"type": "object", "properties": {}, "additionalProperties": False},
+            "parameters": {
+                "type": "object",
+                "properties": {},
+                "additionalProperties": False,
+            },
         },
     },
     {
@@ -66,7 +71,9 @@ TOOL_SCHEMAS = [
             "description": "读取 workspace 内的文本文件。path 是相对 workspace 的路径，例如 security.py。",
             "parameters": {
                 "type": "object",
-                "properties": {"path": {"type": "string", "description": "相对文件路径"}},
+                "properties": {
+                    "path": {"type": "string", "description": "相对文件路径"}
+                },
                 "required": ["path"],
                 "additionalProperties": False,
             },
@@ -88,11 +95,48 @@ def execute_tool(name: str, raw_arguments: str) -> str:
         return json.dumps({"ok": False, "error": str(exc)}, ensure_ascii=False)
 
 
+def compact_old_tool_results(messages: list, read_refs: dict, current_step: int):
+    for msg in messages:
+        if msg["role"] != "tool":
+            continue
+
+        info = read_refs.get(msg["tool_call_id"])
+        if info is None:
+            continue
+
+        path, executed_step = info
+
+        if executed_step >= current_step - 1:
+            continue
+
+        data = json.loads(msg["content"])
+
+        if not data.get("ok") or data.get("compressed"):
+            continue
+
+        before = len(msg["content"])
+        msg["content"] = json.dumps(
+            {
+                "ok": True,
+                "compressed": True,
+                "path": path,
+                "note": "历史文件内容已压缩。如需最新代码，请重新调用 read_file。",
+            },
+            ensure_ascii=False,
+        )
+
+        after = len(msg["content"])
+
+        print(f"[Compact] {path}: {before} -> {after} 字符")
+
+
 def run_agent(task: str) -> str:
     # 从项目根目录读取 .env；已经存在的进程环境变量优先。
     load_dotenv(Path(__file__).resolve().parent / ".env")
     if not os.getenv("DEEPSEEK_API_KEY"):
-        raise SystemExit("未找到 DEEPSEEK_API_KEY，请复制 .env.example 为 .env 并填入真实密钥")
+        raise SystemExit(
+            "未找到 DEEPSEEK_API_KEY，请复制 .env.example 为 .env 并填入真实密钥"
+        )
     model = os.getenv("DEEPSEEK_MODEL", "deepseek-flash")
     # DeepSeek 兼容 OpenAI Python SDK；实际请求发往 DeepSeek，而非 OpenAI。
     client = OpenAI(
@@ -100,12 +144,20 @@ def run_agent(task: str) -> str:
         base_url=os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com"),
     )
     messages = [
-        {"role": "system", "content": "你是一个只读代码分析助手。需要事实时先用工具检查文件；不得猜测文件内容。只能使用提供的工具。"},
+        {
+            "role": "system",
+            "content": "你是一个只读代码分析助手。需要事实时先用工具检查文件；不得猜测文件内容。只能使用提供的工具。",
+        },
         {"role": "user", "content": task},
     ]
 
     for step in range(1, MAX_STEPS + 1):
         print(f"\n[第 {step} 轮] 调用模型 {model}")
+        print(f"[Context] 当前消息数量：{len(messages)}")
+
+        read_refs = {}
+        compact_old_tool_results(messages, read_refs, step)
+
         response = client.chat.completions.create(
             model=model,
             messages=messages,
@@ -113,29 +165,44 @@ def run_agent(task: str) -> str:
             # 入门先使用非思考模式，避免额外处理 reasoning_content 的回传。
             extra_body={"thinking": {"type": "disabled"}},
         )
+        if response.usage:
+            print(
+                f"[Tokens] 输入：{response.usage.prompt_tokens}, "
+                f"输出：{response.usage.completion_tokens}"
+            )
         message = response.choices[0].message
         calls = message.tool_calls or []
 
         if not calls:
             return message.content or "模型未产生最终答案"
 
-        messages.append({
-            "role": "assistant",
-            "content": message.content,
-            "tool_calls": [call.model_dump(exclude_none=True) for call in calls],
-        })
+        messages.append(
+            {
+                "role": "assistant",
+                "content": message.content,
+                "tool_calls": [call.model_dump(exclude_none=True) for call in calls],
+            }
+        )
         for call in calls:
             name, raw_args = call.function.name, call.function.arguments
             print(f"  [Action] {name}({raw_args})")
             result = execute_tool(name, raw_args)
+            if name == 'read_file': 
+                try: 
+                    path = json.loads(raw_args)['path']
+                    read_refs[call.id] = (path, step)
+                except (ValueError, TypeError, KeyError):
+                    pass
             print(f"  [Observation] {result[:350]}")
-            messages.append({
-                "role": "tool", "tool_call_id": call.id, "content": result
-            })
+            messages.append(
+                {"role": "tool", "tool_call_id": call.id, "content": result}
+            )
 
     return "达到最大轮数，停止执行（不能据此认定任务成功）"
 
 
 if __name__ == "__main__":
-    question = " ".join(sys.argv[1:]) or "列出文件，读取 security.py，解释权限控制函数的实现。"
+    question = (
+        " ".join(sys.argv[1:]) or "列出文件，读取 security.py，解释权限控制函数的实现。"
+    )
     print("\n[最终回答]\n" + run_agent(question))
