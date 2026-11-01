@@ -1,14 +1,10 @@
 """A minimal, read-only ReAct coding agent (no LangChain)."""
 
 import json
-import os
 import sys
 from pathlib import Path
 
-from dotenv import load_dotenv
-from openai import OpenAI
-
-from runtime import run_react_loop
+from graph import run_agent
 
 ROOT = (Path(__file__).parent / "workspace").resolve()
 ALLOWED_EXTENSIONS = {".py", ".md", ".txt", ".json", ".toml"}
@@ -90,42 +86,15 @@ def execute_tool(name: str, raw_arguments: str) -> str:
             raise ValueError(f"未知或未授权的工具：{name}")
         arguments = json.loads(raw_arguments or "{}")
         if not isinstance(arguments, dict):
-            raise ValueError("工具参数必须是 JSON 对象")
+            raise TypeError("工具参数必须是 JSON 对象")
         result = TOOL_HANDLERS[name](**arguments)
         return json.dumps({"ok": True, "result": result}, ensure_ascii=False)
     except (ValueError, TypeError, OSError, UnicodeError) as exc:
         return json.dumps({"ok": False, "error": str(exc)}, ensure_ascii=False)
 
 
-
-
-def run_agent(task: str) -> str:
-    # 从项目根目录读取 .env；已经存在的进程环境变量优先。
-    load_dotenv(Path(__file__).resolve().parent / ".env")
-    if not os.getenv("DEEPSEEK_API_KEY"):
-        raise SystemExit(
-            "未找到 DEEPSEEK_API_KEY，请复制 .env.example 为 .env 并填入真实密钥"
-        )
-    model = os.getenv("DEEPSEEK_MODEL", "deepseek-flash")
-    # DeepSeek 兼容 OpenAI Python SDK；实际请求发往 DeepSeek，而非 OpenAI。
-    client = OpenAI(
-        api_key=os.environ["DEEPSEEK_API_KEY"],
-        base_url=os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com"),
-    )
-    messages = [
-        {
-            "role": "system",
-            "content": "你是一个只读代码分析助手。需要事实时先用工具检查文件；不得猜测文件内容。只能使用提供的工具。",
-        },
-        {"role": "user", "content": task},
-    ]
-
-    return run_react_loop(client, model, messages, TOOL_SCHEMAS, execute_tool, MAX_STEPS)
-
-
-
 if __name__ == "__main__":
     question = (
         " ".join(sys.argv[1:]) or "列出文件，读取 security.py，解释权限控制函数的实现。"
     )
-    print("\n[最终回答]\n" + run_agent(question))
+    print("\n[最终回答]\n" + run_agent(question, TOOL_SCHEMAS, execute_tool, MAX_STEPS))

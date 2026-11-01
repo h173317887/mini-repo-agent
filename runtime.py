@@ -1,5 +1,6 @@
-from collections.abc import Callable
 import json
+from collections.abc import Callable
+
 
 def compact_old_tool_results(messages: list, read_refs: dict, current_step: int):
 
@@ -10,14 +11,13 @@ def compact_old_tool_results(messages: list, read_refs: dict, current_step: int)
 
     keep_ids = set(latest_by_path.values())
 
-
     for msg in messages:
         if msg["role"] != "tool":
             continue
 
         if msg["tool_call_id"] in keep_ids:
             continue
-        
+
         info = read_refs.get(msg["tool_call_id"])
         if info is None:
             continue
@@ -47,13 +47,20 @@ def compact_old_tool_results(messages: list, read_refs: dict, current_step: int)
 
         print(f"[Compact] {path}: {before} -> {after} 字符")
 
-def run_react_loop(client, model, messages, tool_schemas: list[dict], execute_tool: Callable[[str, str], str], max_steps: int) -> str:
+
+def run_react_loop(
+    client,
+    model,
+    messages,
+    tool_schemas: list[dict],
+    execute_tool: Callable[[str, str], str],
+    max_steps: int,
+) -> str:
     read_refs = {}
     for step in range(1, max_steps + 1):
         print(f"\n[第 {step} 轮] 调用模型 {model}")
         print(f"[Context] 当前消息数量：{len(messages)}")
 
-     
         compact_old_tool_results(messages, read_refs, step)
 
         response = client.chat.completions.create(
@@ -85,9 +92,9 @@ def run_react_loop(client, model, messages, tool_schemas: list[dict], execute_to
             name, raw_args = call.function.name, call.function.arguments
             print(f"  [Action] {name}({raw_args})")
             result = execute_tool(name, raw_args)
-            if name == 'read_file': 
-                try: 
-                    path = json.loads(raw_args)['path']
+            if name == "read_file":
+                try:
+                    path = json.loads(raw_args)["path"]
                     read_refs[call.id] = (path, step)
                 except (ValueError, TypeError, KeyError):
                     pass
