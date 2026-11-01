@@ -4,7 +4,7 @@ import json
 import sys
 from pathlib import Path
 
-from graph import run_agent
+from mini_repo_agent.graph import create_agent
 
 ROOT = (Path(__file__).parent / "workspace").resolve()
 ALLOWED_EXTENSIONS = {".py", ".md", ".txt", ".json", ".toml"}
@@ -97,4 +97,6 @@ if __name__ == "__main__":
     question = (
         " ".join(sys.argv[1:]) or "列出文件，读取 security.py，解释权限控制函数的实现。"
     )
-    print("\n[最终回答]\n" + run_agent(question, TOOL_SCHEMAS, execute_tool, MAX_STEPS))
+    agent = create_agent(TOOL_SCHEMAS, execute_tool, MAX_STEPS)
+    result = agent(question)
+    print("\n[最终回答]\n" + result)
