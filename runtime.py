@@ -47,7 +47,7 @@ def compact_old_tool_results(messages: list, read_refs: dict, current_step: int)
 
         print(f"[Compact] {path}: {before} -> {after} 字符")
 
-def run_react_loop(client, model, messages, tool_schemas: list[dict], execute_tool: Callable[[str, str], str], max_steps: str):
+def run_react_loop(client, model, messages, tool_schemas: list[dict], execute_tool: Callable[[str, str], str], max_steps: int) -> str:
     read_refs = {}
     for step in range(1, max_steps + 1):
         print(f"\n[第 {step} 轮] 调用模型 {model}")

@@ -120,7 +120,7 @@ def run_agent(task: str) -> str:
         {"role": "user", "content": task},
     ]
 
-    run_react_loop(client, model, messages, TOOL_SCHEMAS, execute_tool, MAX_STEPS)
+    return run_react_loop(client, model, messages, TOOL_SCHEMAS, execute_tool, MAX_STEPS)
 
 
 
