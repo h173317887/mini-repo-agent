@@ -49,7 +49,7 @@ def compact_old_tool_results(messages: list, read_refs: dict, current_step: int)
 
 
 def run_react_loop(
-    client,
+    call_model: Callable,
     model,
     messages,
     tool_schemas: list[dict],
@@ -62,14 +62,7 @@ def run_react_loop(
         print(f"[Context] 当前消息数量：{len(messages)}")
 
         compact_old_tool_results(messages, read_refs, step)
-
-        response = client.chat.completions.create(
-            model=model,
-            messages=messages,
-            tools=tool_schemas,
-            # 入门先使用非思考模式，避免额外处理 reasoning_content 的回传。
-            extra_body={"thinking": {"type": "disabled"}},
-        )
+        response = call_model(messages, tool_schemas)
         if response.usage:
             print(
                 f"[Tokens] 输入：{response.usage.prompt_tokens}, "
