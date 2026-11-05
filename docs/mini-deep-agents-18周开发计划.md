@@ -3,6 +3,7 @@
 > 计划周期：**2026-11-02 ～ 2027-03-07** ｜ 每周 **24 小时** ｜ 共 **18 周 / 432 小时**  
 > 最终交付：**Mini Deep Agents V1.0**——架构清晰、可运行、可评估的轻量级 Agent Harness，附一个代码仓库分析 / 受控修改 Agent、20 条任务的评估集与评估报告。  
 > 版本定位：**学习性工程实现，不等同于完整复刻官方 Deep Agents，也不承诺生产级沙盒与分布式可靠性。**
+> 技术路线：**W1–W4 手写最小 Harness → W5 迁移 LangChain / LangGraph → W6–W18 基于官方运行时扩展 Deep Agents 风格能力**。
 
 ---
 
@@ -13,8 +14,8 @@
 **学习方式：**
 
 - **主要参照**：[Deep Agents 源码](https://github.com/langchain-ai/deepagents)及其 [ARCHITECTURE.md](https://github.com/langchain-ai/deepagents/blob/main/libs/ARCHITECTURE.md)；**理论依据**：[李博杰的书](https://github.com/bojieli/ai-agent-book)；Codex 仅作 Runtime / 执行安全的辅助参考。
-- **不要让我自行发明架构，也不要直接使用 Deep Agents 高级 API 拼装结果。**请先核对官方源码中的设计与职责，再带我用 Python 亲手实现简化版本，明确说明与官方实现的差异。
-- 保留我们现有的**手写 ReAct Runtime**；Deep Agents 官方底层依赖 LangChain / LangGraph，我们先实现所需的最小 Runtime 机制，必要时再学习或引入 LangGraph。
+- **不要让我自行发明架构，也不要直接使用 `deepagents.create_deep_agent()` 高级 API 拼装结果。**每一步先核对官方 Deep Agents 和它依赖的 LangChain / LangGraph 源码，再实现简化版本或官方扩展点，解释取舍。
+- **W1–W4 手写最小 ReAct Runtime / Middleware**，理解底层机制；**W5 必须迁移到 `langchain.agents.create_agent()`（底层由 LangGraph 执行）**；W6 起基于官方 Runtime 构建自定义 Middleware / Backend / Skills / Subagents。手写 Runtime 此后只用于教学对照和回归，不再作为正式入口。
 - **尽可能采用 Deep Agents 官方同名模块和目录职责**（如 `graph.py`、`middleware/summarization.py`、`backends/protocol.py`），但不要提前创建无用抽象。
 - 以真实工程功能为主，不再做大量孤立实验。每次只推进**一个小步骤**：源码与动机 → 数据流 / 职责 → 最小改动 → 我动手实现 → 运行验收。重要的 Python 语法请顺带讲解。
 - 指导代码前，**先通过 GitHub 连接器查看我的仓库最新内容**，不要根据旧对话臆测；除非我要求，不要一次性替我写完所有代码。
@@ -23,7 +24,7 @@
 
 **最终目标：** 实现 Runtime、Tools、Middleware、Backend、Context 管理、Planning / State、Skills、Subagents、Checkpoint / Interrupt、人工审批与 CLI；让 Agent 在受控工作区执行代码分析与经授权的修改，并建设可重复运行的 **Agent 评估集、自动评估器与回归报告**（对齐李博杰第七章）。
 
-**现在请按照本文第一个开发周的计划，从 W1 的第一小步开始指导我。先读取最新代码并分析职责，不要直接给整套重构代码。**
+**当前已完成 W1–W2，正在学习 W3。**请每次从 GitHub 最新代码及本计划的当前周出发，按“源码机制 → 职责边界 → 最小实现 → 测试”推进；不要退回 W1，也不要一次性写完整周代码。
 
 ---
 
@@ -32,10 +33,18 @@
 ### 项目定位
 
 - **主线：Deep Agents 架构**，不是重新设计一套独立的 Agent 范式。
-- **底座：自实现最小 ReAct Runtime**（官方通过 LangChain / LangGraph 提供），用于理解执行循环与后续中间件接入。
-- **对照：同名、同职责优先**，但不强求官方内部 API、文件数量或完整运行时语义一致。
+- **底座分阶段**：W1–W4 手写最小 Runtime / Middleware 用于理解；W5 切换 LangChain `create_agent()` + LangGraph；此后只扩展官方 Agent Runtime，不独立维护第二套正式执行框架。
+- **对照：同名、同职责优先**。W3–W4 优先模拟官方 `AgentMiddleware` 的 `state` / `runtime` / 状态更新语义；W5 起使用官方接口，避免重写已有能力。
 - **每一周都要有可运行交付**；测试伴随开发，不堆到最后一周。
 - **评估贯穿开发**：单元/集成测试验证代码机制；Agent Evaluation 验证真实任务是否成功、证据是否可靠、执行是否安全、成本是否可接受。
+
+### 迁移策略与完成门槛
+
+1. **W1–W4（机制学习）**：理解 ReAct、Tool、Middleware；手写实现不追求 LangGraph 的状态图、异步、持久化等完整语义。
+2. **W5（一次正式迁移）**：固定依赖版本，把模型、工具、Middleware、Agent 入口接入 LangChain；由底层 LangGraph 执行状态图；保留手写 `runtime.py` 在教学/对照测试中，不再被正式 CLI 使用。优先迁移模型和工具、回归执行链，再迁移日志与 trace；不要求两个实现的内部事件格式逐字一致。
+3. **W6–W18（框架扩展）**：Backend、Context、Skills、Subagents 等优先写成 LangChain / Deep Agents 风格的可组合 Middleware 或独立能力。Checkpoint、Interrupt、State 使用 LangGraph 现有机制，不再手造可替代的通用基础设施。
+4. **禁止两种极端**：既不直接调用 `deepagents.create_deep_agent()` 跳过学习，也不在迁移后重复实现一套 LangGraph。只有官方机制无法满足具体需求时，才增加最小适配代码。
+5. **迁移验收**：与 W2–W4 相同的 Mock 场景（工具成功/失败、最终回答、中间件顺序、日志追踪）能通过；CLI 正式运行新的 `create_agent()` 路径；对照说明行为差异。迁移阻塞时先修复 W5，不把半迁移的设计滚到 W6。
 
 ### 每周固定 24 小时
 
@@ -90,73 +99,73 @@
 **源码参照：** 官方 `graph.py` 的 middleware 组装、LangChain Agent Middleware 接口。
 
 **任务：**
-1. 明确 Middleware 与 Tool 的区别：Middleware 可参与模型请求构造，Tool 由模型主动选择调用。
-2. 实现最小的 `before_model` / `after_model` 钩子和中间件列表执行器。
-3. 将原有 Token / Context 日志迁移为可独立启停的 Middleware。
-4. 用 Mock 模型验证钩子只按规定顺序执行，不意外修改消息。
+1. 对照 Deep Agents `graph.py` 的 Middleware 列表组装以及 LangChain `AgentMiddleware` 源码，区分 Tool、Middleware 和 Runtime 的职责。
+2. 手写最小 `AgentState` / 运行时上下文与 `before_model(state, runtime)`、`after_model(state, runtime)`，允许返回状态更新（或 `None`）；不把 `after_model` 错误设计为直接接收 ModelResponse。
+3. 实现中间件列表与明确的钩子执行次序，把 Context / Token 日志迁移为可独立启停的 Middleware。
+4. Mock 验证每轮模型调用的钩子顺序、无工具时的执行、状态更新与消息不被意外就地修改。
 
-**交付 / 验收：** 不改 Runtime 核心循环也可添加 / 移除日志行为。
+**交付 / 验收：** 新增/移除日志 Middleware 不需要加入专用的 Runtime `if` 分支；明确说明与官方 LangChain 状态节点钩子的差异。
 
 #### W4｜11/23–11/29｜工具包装、执行链和失败语义
 
 **源码参照：** LangChain Middleware 的 `wrap_model_call`、`wrap_tool_call` 思想；Deep Agents `patch_tool_calls.py`。
 
 **任务：**
-1. 加入工具执行前后拦截或包装能力，规定中间件先后次序。
-2. 对模型请求、工具调用、异常与取消建立统一日志与结果语义。
-3. 将“不合法工具调用”的修复或拒绝逻辑放在正确层次，不靠 Prompt 约束。
-4. 加入中间件排序、异常传播和工具结果与 call ID 配对的回归测试；保存一条可回放的固定模型/工具轨迹样例。
+1. 参照 `wrap_model_call(request, handler)` / `wrap_tool_call(request, handler)` 的装饰调用链思想，手写最小模型及工具包装能力，弄清执行顺序（先注册的包装层在外层）。
+2. 对模型请求、工具调用、异常及取消定义最小日志与失败语义；不提前实现 LangGraph 的异步图、Checkpoint 或 Interrupt。
+3. 将“不合法工具调用”的拒绝逻辑放在工具边界（或包装层），不依赖 Prompt；保持 tool_call_id 与结果配对。
+4. Mock 覆盖两个以上 Middleware 的顺序、异常传播、结果配对；保存固定模型/工具轨迹，为 W5 的迁移对照提供基线。
 
 **交付 / 验收：** 两个以上 Middleware 可组合，执行顺序可预测；主循环不含各类特性专用的 `if` 分支。
 
-**里程碑 M1：** 具备可扩展的最小 Harness 基础。
+**里程碑 M1：** 完成手写最小 Harness；行为测试与执行轨迹构成 W5 迁移基线，手写实现自此停止扩张。
 
-### 阶段 C：Backend 与文件工具（W5–W6，共 48h）
+### 阶段 C：迁移 LangChain / LangGraph 与文件能力（W5–W6，共 48h）
 
-#### W5｜11/30–12/06｜Backend Protocol 和 Local Filesystem
+#### W5｜11/30–12/06｜正式迁移：LangChain create_agent + LangGraph Runtime
 
-**源码参照：** `backends/protocol.py`、`backends/filesystem.py`。
-
-**任务：**
-1. 先对照官方 BackendProtocol，找出当前项目真正需要的最小能力，不照搬全部接口。
-2. 建立 `backends/protocol.py` 与本地文件实现；分离文件存储能力和 Agent 可见工具。
-3. 路径越界、隐藏文件、符号链接等安全规则继续由受控后端执行。
-4. 对读取、列表、找不到文件、越权路径等场景写测试。
-
-**交付 / 验收：** Runtime 不直接使用 `Path.read_text()`；替换后端不影响 Agent 对工具的调用方式。
-
-#### W6｜12/07–12/13｜FilesystemMiddleware 与真实仓库分析
-
-**源码参照：** `middleware/filesystem.py`。
+**源码参照：** Deep Agents `graph.py` 的 `create_deep_agent() → langchain.agents.create_agent()`；LangChain `create_agent` / `AgentMiddleware`；LangGraph 的状态图执行机制。
 
 **任务：**
-1. 将文件操作工具通过 FilesystemMiddleware 暴露给 Agent。
-2. 增加最小代码搜索与按行读取（避免一次塞入整个大文件）。
-3. 将测试 `workspace` 扩展到一个真实的小型 Python 仓库。
-4. 输出包含文件路径和代码行号的分析结果，检查引用是否真的存在；建立首批 4–5 条仓库定位/多文件分析评估任务（附标准答案与验证规则）。
+1. 固定 `langchain`、`langchain-openai`、`langgraph` 等版本；用官方聊天模型封装连接 DeepSeek（例如配置 `ChatOpenAI` 的 `base_url`）；确认模型、Tool Calls 和 usage 的语义。
+2. 将 `TOOL_SCHEMAS` / handler 映射为 LangChain Tools，保留现有只读工作区限制；在 `graph.py` 使用 `create_agent(model, tools=..., middleware=...)` 组装正式 Agent，不直接调用 `deepagents.create_deep_agent()`。
+3. 将 W3–W4 中有价值的日志/拦截逻辑迁移到真正的 `AgentMiddleware`；用框架提供的 State / Runtime 结构替换教学版的自定义状态约定。
+4. 迁移 CLI 入口并跑同一组 Mock 回归和真实只读任务，核查工具成功/未知工具/坏参数、结束条件、Middleware 次序及可观察的调用轨迹；记录与手写版的行为差异。
 
-**交付 / 验收：** 给 Agent 一个未指定文件名的问题，它能够先搜索再读取并定位实际代码。
+**交付 / 验收：** 正式入口执行 LangChain Agent（底层 LangGraph）；回归通过且能分析执行图节点、模型调用和 Tool 节点。原 `runtime.py` 仅作为教学对照实现，可移入 `legacy/` 或保持隔离，但不可在正式运行路径中继续调用。
+
+#### W6｜12/07–12/13｜Backend Protocol + FilesystemMiddleware
+
+**源码参照：** Deep Agents `backends/protocol.py`、`backends/filesystem.py` 与 `middleware/filesystem.py`。
+
+**任务：**
+1. 参照官方 `BackendProtocol` 提取当前只读仓库分析真正需要的最小接口，用本地工作区实现；不重复封装 LangGraph 的 State / Checkpointer。
+2. 将 W2 原有文件读取、列表与路径安全逻辑迁移到 Backend；通过 `FilesystemMiddleware` 提供模型可见 Tools，明确“存储能力”和“Agent 工具接口”的分层。
+3. 增加最小代码搜索或按行读取能力，处理不存在文件、隐藏文件、越界路径与符号链接等边界；保持原有安全限制。
+4. 在固定的小型仓库中完成可复位的多文件分析任务，启动首批 4–5 条带预期证据的 Agent 评估用例。
+
+**交付 / 验收：** 正式 Agent 能通过 Middleware 访问受限 Backend，定位未知文件名的代码问题并返回可验证路径/行号；不再在工具层直接硬编码文件系统实现。
 
 ### 阶段 D：Context Engineering（W7–W9，共 72h）
 
-#### W7｜12/14–12/20｜Token Budget 与基础 Summarization
+#### W7｜12/14–12/20｜官方 Middleware 上的 Token Budget 与基础 Summarization
 
 **源码参照：** `middleware/summarization.py`、消息历史管理。
 
 **任务：**
-1. 将旧的重复 Observation 压缩迁移至 SummarizationMiddleware，保留已有行为作为基线。
+1. 在官方 Agent Runtime 中编写 SummarizationMiddleware，将旧的重复 Observation 压缩作为对照基线；遵守 LangChain 消息/状态更新规则，不直接就地修改状态消息。
 2. 增加输入 Token 估算 / API usage 记录、预算阈值与触发规则。
 3. 设计工具结果过长时的可控截断或外存策略入口，避免失去整个工具响应。
 4. 测试多轮请求中消息协议完整、不会出现“有工具调用但缺工具结果”。
 
-**交付 / 验收：** Context 管理由独立 Middleware 负责；预算触发后 Agent 仍可以继续执行。
+**交付 / 验收：** Context 管理由独立 LangChain Middleware 负责；预算触发后 Agent 仍能保持合法消息协议并继续执行。
 
 #### W8｜12/21–12/27｜Task-aware Compression
 
 **源码参照：** 官方 SummarizationMiddleware；李博杰第二章压缩设计原则。
 
 **任务：**
-1. 压缩时显式提供当前任务、关键约束、原始证据来源。
+1. 在自研 SummarizationMiddleware 上压缩时显式提供当前任务、关键约束和证据来源，不复制一份独立 Context Runtime。
 2. 保存必要的决策、失败原因、精确字面值与可回读路径；允许需要时重新读取。
 3. 将摘要接入真实多文件分析任务，不再单独做孤立 `task_aware_test.py`。
 4. 测试“压缩后仍能报告精确标记、比较文件一致性、不产生交替重读循环”。
@@ -184,7 +193,7 @@
 **源码参照：** Deep Agents 的工具 / Middleware 组装，及其规划工具行为；注意官方具体职责不一定落在独立 `planning.py`。
 
 **任务：**
-1. 为任务定义最小状态结构（消息、TODO、工具调用次数、当前进度）。
+1. 扩展 LangGraph Agent State 的业务字段（TODO、工具调用次数、当前进度），消息沿用官方 State / reducer 语义，不重新实现消息状态机。
 2. 提供创建 / 更新 TODO 的工具，严格校验状态流转。
 3. 将关键状态以模型易读的方式注入 Context，尽量不重写稳定前缀。
 4. 使用多步骤仓库任务测试状态变化、重复调用与完成判定；为评估集补充任务完成状态/错误退出场景。
@@ -211,7 +220,7 @@
 
 **任务：**
 1. 提供 `task` 委派工具，明确主 Agent 与子 Agent 的调用关系。
-2. 子 Agent 复用 Runtime，但拥有独立消息历史和工具配置。
+2. 子 Agent 复用 LangChain/LangGraph Agent 创建与执行机制，但拥有独立 State / 消息历史及工具配置。
 3. 委派任务必须有明确的目标、约束、上下文输入和输出格式。
 4. 测试主上下文不会直接混入子 Agent 的全部中间 Observation。
 
@@ -233,43 +242,43 @@
 
 ### 阶段 G：持久化、恢复和权限（W14–W16，共 72h）
 
-#### W14｜02/01–02/07｜Checkpoint 最小版本
+#### W14｜02/01–02/07｜基于 LangGraph Checkpointer 的持久化恢复
 
-**源码参照：** 官方 Deep Agents 的 State 和 LangGraph Checkpointer 机制（本项目简化实现）。
-
-**任务：**
-1. 定义 AgentState 的可序列化内容与不应持久化的临时数据。
-2. 使用本地文件或 SQLite 实现原子保存与读取。
-3. 为一次执行建立 session / thread 标识，支持加载最近的稳定状态。
-4. 验证进程重启后可以恢复任务上下文与 TODO；避免重复执行已完成的副作用操作。
-
-**交付 / 验收：** 在指定安全边界下，Agent 可从先前 Checkpoint 恢复并继续执行。
-
-#### W15｜02/08–02/14｜Interrupt / Human-in-the-loop
-
-**源码参照：** Deep Agents 工具权限和 LangGraph Interrupt / HumanInTheLoopMiddleware。
+**源码参照：** LangGraph Checkpointer、线程状态与恢复机制；Deep Agents `graph.py` 对 `checkpointer` 的传递方式。
 
 **任务：**
-1. 定义“待审批工具调用”的暂停状态，不执行待审批操作。
-2. CLI 允许用户批准、拒绝（可选：修改参数）后恢复。
-3. 检查审批与原始工具调用 ID、参数和会话绑定，拒绝陈旧批准。
-4. 测试拒绝后的行为、重启恢复待审批状态以及重复批准保护；增加未经授权执行必须为 0 的安全评估项。
+1. 确认 Agent State 中哪些信息进入 Checkpoint，哪些是临时状态；明确 `thread_id`、checkpoint 和业务 `task_id` 的区别。
+2. 接入 LangGraph 现有持久化 Checkpointer（如 SQLite 对应实现），不再手写通用原子保存/状态恢复引擎。
+3. 让同一 thread 能保存、读取并恢复消息和 TODO，验证进程重新启动后的状态一致性。
+4. 设计恢复后工具副作用的测试，标记哪些操作必须有幂等或人工确认保障，避免把 Checkpoint 误当事务回滚。
 
-**交付 / 验收：** 危险操作未获批准不会执行，批准后能够继续同一任务。
+**交付 / 验收：** Agent 使用 LangGraph Checkpointer 支持指定 thread 的恢复，业务状态可追踪，文档解释持久化边界及重复执行风险。
+
+#### W15｜02/08–02/14｜基于 LangGraph Interrupt 的 Human-in-the-loop
+
+**源码参照：** LangGraph Interrupt / Command、LangChain `HumanInTheLoopMiddleware` 与 Deep Agents 的工具权限配置。
+
+**任务：**
+1. 为需要审批的操作配置中断点，保存待审批的工具名、参数、call ID 和 thread 关联；未批准前不得执行。
+2. 使用 LangGraph Interrupt 与恢复命令实现 CLI 的批准/拒绝（参数修改可选），不自己另写一套暂停/继续调度器。
+3. 验证“审批时看到的请求”与“恢复后实际执行的请求”一致，防止过期或重复批准导致越权操作。
+4. 用 Mock 和持久化 thread 测试拒绝、恢复、重启后继续与副作用防重，补充安全评估任务。
+
+**交付 / 验收：** 正式运行路径使用 LangGraph 的暂停/恢复机制，未经批准的实际写入/执行次数为 0；审批与状态恢复可验证。
 
 #### W16｜02/15–02/21｜受控文件编辑与基础记忆
 
 **源码参照：** `middleware/permissions.py`、`middleware/memory.py`、`backends/store.py`。
 
 **任务：**
-1. 增加受控写入 / 编辑工具，所有目标限制在工作区，默认需要审批。
+1. 在现有 Backend / FilesystemMiddleware 上增加受控写入 / 编辑工具，所有目标限制在工作区并接入 W15 的审批链，默认拒绝未批准操作。
 2. 加入操作前后 diff、失败回滚或备份恢复的最小机制。
 3. 实现简单持久化记忆存储与按需读取，区分跨任务记忆和单次任务 Context。
 4. 测试路径安全、未经批准写入、记忆错误注入和文件回滚；补齐编辑/测试类评估任务，并为正式评估固定测试仓库版本。
 
 **交付 / 验收：** Agent 能在明确授权下修改文件；跨会话信息能按需检索，不等于每轮全部注入。
 
-**里程碑 M4：** 支持基本持久化、暂停恢复和人工审批。
+**里程碑 M4：** 基于 LangGraph 具备状态持久化、暂停恢复与人工审批，扩展层支持受控文件编辑。
 
 ### 阶段 H：CLI、Agent 评估与发布（W17–W18，共 48h）
 
@@ -342,8 +351,9 @@
 
 ### 4. 按周形成的评估资产
 
-- **W2–W4**：形成可记录/可回放的基础模型与工具轨迹，Mock 回归通过。
-- **W6**：建立 4–5 条可复位的仓库分析评估任务。
+- **W2–W4**：形成手写 Runtime 的模型/工具轨迹，Mock 回归通过。
+- **W5**：相同回归任务在 LangChain/LangGraph 执行路径下通过；保留迁移前后行为差异记录。
+- **W6**：在正式 Runtime 中建立 4–5 条可复位的仓库分析评估任务。
 - **W7–W9**：将 Token、重复读取、压缩正确性纳入任务级记录，形成首个配置对照。
 - **W10–W16**：随 Planning、Skills、Subagents、Checkpoint、审批与文件编辑逐步扩充任务，累计至 20 条。
 - **W17**：完成统一 `evals/` 运行器、验证器、结果保存和完整基线执行。
@@ -384,14 +394,14 @@ langchain-ai/deepagents/                 # 官方仓库根目录
 | `middleware/` | `mini_repo_agent/middleware/` | 优先保持同名文件、相同职责 |
 | `backends/` | `mini_repo_agent/backends/` | 接口、文件存储及状态存储 |
 | `profiles/` | 暂不要求 | 官方功能，第一版按需研究 |
-| 底层依赖 LangChain / LangGraph | **额外的** `mini_repo_agent/runtime.py` | 我们自行实现 ReAct 循环，便于学习 |
+| 底层依赖 LangChain / LangGraph | W1–W4 `mini_repo_agent/runtime.py`；W5 起使用框架 Runtime | 手写循环仅保留教学对照，正式执行由 `create_agent()` 负责 |
 | 不要求同名评估目录 | **额外的** `evals/` | 对齐李博杰第七章 Agent 评估 |
 
-**关键差异：**官方 `graph.py` 调用 LangChain `create_agent()`，Runtime 和一部分持久化/中断能力依赖 LangGraph；我们自己的 `graph.py` 则组装手写 `runtime.py`。不要将两者描述成完全相同的实现。
+**关键差异（按阶段）：** W1–W4 我们的 `graph.py` 组装手写 `runtime.py`；W5 起和 Deep Agents 一样从 `graph.py` 调用 LangChain `create_agent()`，其执行与持久化/中断能力依赖 LangGraph。我们仍只实现所需的自定义 Middleware / Backend / Agent 能力，不等于直接调用完整的 `deepagents.create_deep_agent()`。
 
 ### 目标文件结构
 
-以下是**目标结构示意**，不要求 W1 一次创建完。文件职责优先对齐官方；官方没有的 Runtime 由我们增加。当前仓库已存在 `mini_repo_agent/graph.py`、`runtime.py`、`_tools.py`，后续在现有代码上演进，而不是从零重新创建。
+以下是 **W5 迁移后的目标结构示意**，不要求提前创建。当前已有的 `runtime.py` 在迁移后保留为教学实现，正式执行入口不再依赖它；其余模块从现有代码渐进改造。
 
 ```text
 mini-repo-agent/
@@ -399,7 +409,8 @@ mini-repo-agent/
 ├── mini_repo_agent/
 │   ├── __init__.py
 │   ├── graph.py                     # Agent 构建与 Middleware 组装
-│   ├── runtime.py                   # 自实现 ReAct Runtime（官方用 LangChain/LangGraph）
+│   ├── legacy/                      # 可选：教学用手写 Runtime（非正式入口）
+│   │   └── runtime.py
 │   ├── _models.py                   # 模型适配
 │   ├── _tools.py                    # 工具定义与执行
 │   ├── middleware/
@@ -415,8 +426,7 @@ mini-repo-agent/
 │       ├── __init__.py
 │       ├── protocol.py              # Backend 接口
 │       ├── filesystem.py            # 本地文件访问
-│       ├── state.py                 # 运行状态后端
-│       └── store.py                 # 持久化信息存储
+│       └── store.py                 # 业务记忆 Backend（非 LangGraph Checkpointer）
 ├── skills/
 │   └── code-review/
 │       └── SKILL.md
@@ -440,21 +450,21 @@ mini-repo-agent/
 
 ### V1.0 必须具备
 
-- 可执行的 Agent Runtime、Tool Registry、Middleware 组合及可替换文件 Backend。
+- 基于 LangChain `create_agent()` / LangGraph 的正式 Agent Runtime、Tool Registry、Middleware 组合及可替换文件 Backend；手写版本仅用于学习对照。
 - Context 管理（预算、摘要 / 外存）、TODO / State、Skills 渐进加载、Subagents。
-- 基础 Checkpoint、Interrupt、人工审批；受控文件编辑和固定测试执行入口。
+- 使用 LangGraph Checkpointer / Interrupt 的持久化恢复和人工审批；受控文件编辑和固定测试执行入口。
 - CLI、关键路径自动化测试和真实仓库端到端示例。
 - **Agent Evaluation**：至少 20 条固定任务、自动化验证器、质量/成本/安全指标、失败归因和可复现的评估报告。
 
 ### V1.0 暂不追求
 
-- 官方全部 Provider Profiles、完整 LangGraph 运行语义、跨机器分布式调度。
+- 官方全部 Provider Profiles、对 LangGraph 内部运行时的完整重实现、跨机器分布式调度。
 - 生产级多租户隔离、完整操作系统级 Sandbox、任意 Shell 的安全执行。
 - 大规模并发子 Agent、多用户权限系统、成熟的云端部署运维体系。
 
 ### 项目成功的最终判据
 
-**不是“文件数量像 Deep Agents”，而是：**你能够亲手完成这套轻量级实现，并对照官方源码解释每个核心模块的职责、数据流、调用关系和设计取舍；系统确实能完成一个真实、受控的多步骤 Coding Agent 任务，且能够用可重复的评估结果说明质量、可靠性、成本与限制。
+**不是“文件数量像 Deep Agents”，而是：**你能解释手写 Runtime 与 LangChain / LangGraph Runtime 的对应关系，亲手完成迁移并开发可组合的 Middleware / Backend / Agent 能力；对照官方源码说明模块职责、数据流与设计取舍；系统能完成真实、受控的多步骤 Coding Agent 任务，并用可重复评估说明质量、可靠性、成本与限制。
 
 ---
 
@@ -465,6 +475,9 @@ mini-repo-agent/
 - [Deep Agents Architecture](https://github.com/langchain-ai/deepagents/blob/main/libs/ARCHITECTURE.md)
 - [Deep Agents 核心 graph.py](https://github.com/langchain-ai/deepagents/blob/main/libs/deepagents/deepagents/graph.py)
 - [Deep Agents Middleware 源码](https://github.com/langchain-ai/deepagents/tree/main/libs/deepagents/deepagents/middleware)
+- [LangChain AgentMiddleware 接口](https://github.com/langchain-ai/langchain/blob/master/libs/langchain_v1/langchain/agents/middleware/types.py)
+- [LangChain create_agent](https://docs.langchain.com/oss/python/langchain/agents)
+- [LangGraph 持久化 / 中断机制](https://docs.langchain.com/oss/python/langgraph/persistence)
 - [Deep Agents Backend 源码](https://github.com/langchain-ai/deepagents/tree/main/libs/deepagents/deepagents/backends)
 - [李博杰《深入理解 AI Agent 架构》](https://github.com/bojieli/ai-agent-book)
 - [第七章：Agent 的评估](https://github.com/bojieli/ai-agent-book/blob/main/book/chapter7.md)
