@@ -65,6 +65,17 @@ def run_react_loop(
         compact_old_tool_results(messages, read_refs, step)
         response = model.invoke(messages, tool_schemas)
 
+        if trace is not None:
+            trace.append(
+                {
+                    "event": "model",
+                    "task_id": task_id,
+                    "step": step,
+                    "model": model.name,
+                    "usage": response.usage,
+                }
+            )
+
         if response.usage:
             print(
                 f"[Tokens] 输入：{response.usage['input_tokens']}, "
@@ -102,7 +113,6 @@ def run_react_loop(
                         "result": result,
                         "event": "tool",
                         "task_id": task_id,
-                        "usage": response.usage
                     }
                 )
             if name == "read_file":
