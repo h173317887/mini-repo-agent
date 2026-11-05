@@ -184,10 +184,3 @@ def test_default_task_id():
     assert UUID(hex=task_id).hex == task_id
 
 
-if __name__ == "__main__":
-    test_runtime()
-    test_unknown_tool()
-    test_invalid_arguments()
-    test_model_ends_without_tools()
-    test_default_task_id()
-    print("W2 Mock 测试通过（5/5）")
