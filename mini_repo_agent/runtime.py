@@ -54,6 +54,7 @@ def run_react_loop(
     tool_schemas: list[dict],
     execute_tool: Callable[[str, str], str],
     max_steps: int,
+    trace: list[dict] | None = None,
 ) -> str:
     read_refs = {}
     for step in range(1, max_steps + 1):
@@ -90,6 +91,16 @@ def run_react_loop(
             print(f"  [Action] {name}({raw_args})")
             result = execute_tool(name, raw_args)
 
+            if trace is not None:
+                trace.append(
+                    {
+                        "step": step,
+                        "call_id": call_id,
+                        "name": name,
+                        "arguments": raw_args,
+                        "result": result,
+                    }
+                )
             if name == "read_file":
                 try:
                     path = json.loads(raw_args)["path"]

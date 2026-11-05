@@ -54,7 +54,16 @@ def execute_tool(name: str, raw_arguments: str) -> str:
         result = TOOL_HANDLERS[name](**arguments)
         return json.dumps({"ok": True, "result": result}, ensure_ascii=False)
     except (ValueError, TypeError, OSError, UnicodeError) as exc:
-        return json.dumps({"ok": False, "error": str(exc)}, ensure_ascii=False)
+        return json.dumps(
+            {
+                "ok": False,
+                "error": {
+                    "type": type(exc).__name__,
+                    "message": str(exc),
+                },
+            },
+            ensure_ascii=False,
+        )
 
 
 TOOL_HANDLERS = {"list_files": list_files, "read_file": read_file}
@@ -87,3 +96,18 @@ TOOL_SCHEMAS = [
         },
     },
 ]
+
+
+def validate_tool_registry() -> None:
+    schema_names = [schema["function"]["name"] for schema in TOOL_SCHEMAS]
+
+    if len(schema_names) != len(set(schema_names)):
+        raise ValueError("工具 Schema 存在重复名称")
+
+    handler_names = set(TOOL_HANDLERS)
+
+    if set(schema_names) != handler_names:
+        raise ValueError("工具 Schema 与 Handler 注册不一致")
+
+
+validate_tool_registry()
