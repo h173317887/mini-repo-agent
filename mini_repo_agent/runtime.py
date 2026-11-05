@@ -49,7 +49,6 @@ def compact_old_tool_results(messages: list, read_refs: dict, current_step: int)
 
 
 def run_react_loop(
-    call_model: Callable,
     model,
     messages,
     tool_schemas: list[dict],
@@ -62,38 +61,49 @@ def run_react_loop(
         print(f"[Context] 当前消息数量：{len(messages)}")
 
         compact_old_tool_results(messages, read_refs, step)
-        response = call_model(messages, tool_schemas)
+        response = model.invoke(messages, tool_schemas)
+
         if response.usage:
             print(
-                f"[Tokens] 输入：{response.usage.prompt_tokens}, "
-                f"输出：{response.usage.completion_tokens}"
+                f"[Tokens] 输入：{response.usage['input_tokens']}, "
+                f"输出：{response.usage['output_tokens']}"
             )
-        message = response.choices[0].message
-        calls = message.tool_calls or []
+
+        calls = response.tool_calls or []
 
         if not calls:
-            return message.content or "模型未产生最终答案"
+            return response.content or "模型未产生最终答案"
 
         messages.append(
             {
                 "role": "assistant",
-                "content": message.content,
-                "tool_calls": [call.model_dump(exclude_none=True) for call in calls],
+                "content": response.content,
+                "tool_calls": calls,
             }
         )
+
         for call in calls:
-            name, raw_args = call.function.name, call.function.arguments
+            call_id = call["id"]
+            name = call["function"]["name"]
+            raw_args = call["function"]["arguments"]
+
             print(f"  [Action] {name}({raw_args})")
             result = execute_tool(name, raw_args)
+
             if name == "read_file":
                 try:
                     path = json.loads(raw_args)["path"]
-                    read_refs[call.id] = (path, step)
+                    read_refs[call_id] = (path, step)
                 except (ValueError, TypeError, KeyError):
                     pass
+
             print(f"  [Observation] {result[:350]}")
             messages.append(
-                {"role": "tool", "tool_call_id": call.id, "content": result}
+                {
+                    "role": "tool",
+                    "tool_call_id": call_id,
+                    "content": result,
+                }
             )
 
     return "达到最大轮数，停止执行（不能据此认定任务成功）"
