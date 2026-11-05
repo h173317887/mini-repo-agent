@@ -55,6 +55,7 @@ def run_react_loop(
     execute_tool: Callable[[str, str], str],
     max_steps: int,
     trace: list[dict] | None = None,
+    task_id: str | None = None,
 ) -> str:
     read_refs = {}
     for step in range(1, max_steps + 1):
@@ -99,6 +100,9 @@ def run_react_loop(
                         "name": name,
                         "arguments": raw_args,
                         "result": result,
+                        "event": "tool",
+                        "task_id": task_id,
+                        "usage": response.usage
                     }
                 )
             if name == "read_file":
