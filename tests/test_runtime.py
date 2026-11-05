@@ -1,7 +1,10 @@
 """Mock-model regression tests for the ReAct Runtime (no LLM API calls)."""
 
 import json
+from unittest.mock import patch
+from uuid import UUID
 
+from mini_repo_agent.graph import create_agent
 from mini_repo_agent._models import ModelResponse
 from mini_repo_agent._tools import TOOL_SCHEMAS, execute_tool
 from mini_repo_agent.runtime import run_react_loop
@@ -98,6 +101,20 @@ def test_runtime():
     assert result == "任务完成"
     assert model.step == 2
     assert get_tool_result(messages) == {"ok": True, "result": ["security.py"]}
+
+    model_events = [event for event in trace if event["event"] == "model"]
+    tool_events = [event for event in trace if event["event"] == "tool"]
+    assert len(model_events) == 2
+    assert [event["step"] for event in model_events] == [1, 2]
+    assert [event["usage"] for event in model_events] == [
+        {"input_tokens": 10, "output_tokens": 5},
+        {"input_tokens": 8, "output_tokens": 2},
+    ]
+    assert all(event["task_id"] == "w2-mock-001" for event in model_events)
+    assert all(event["model"] == "fake-model" for event in model_events)
+    assert len(tool_events) == 1
+    assert "usage" not in tool_events[0]
+
     assert any(
         record.get("call_id") == "call_1"
         and record.get("name") == "list_files"
@@ -142,7 +159,29 @@ def test_model_ends_without_tools():
     assert result == "任务完成"
     assert model.step == 1
     assert messages == [{"role": "user", "content": "执行测试任务"}]
-    assert not any(record.get("event") == "tool" for record in trace)
+    assert len(trace) == 1
+    assert trace[0]["event"] == "model"
+    assert trace[0]["usage"] == {"input_tokens": 10, "output_tokens": 5}
+    assert trace[0]["task_id"] == "w2-mock-001"
+
+
+def test_default_task_id():
+    # Patch only agent assembly; the Runtime still executes normally.
+    with patch(
+        "mini_repo_agent.graph.create_model",
+        return_value=FakeModel(finish_immediately=True),
+    ):
+        agent = create_agent(TOOL_SCHEMAS, execute_tool, max_steps=3)
+
+    trace = []
+    assert agent("直接回答", trace=trace) == "任务完成"
+    assert len(trace) == 1
+    assert trace[0]["event"] == "model"
+
+    task_id = trace[0]["task_id"]
+    assert isinstance(task_id, str)
+    assert len(task_id) == 32
+    assert UUID(hex=task_id).hex == task_id
 
 
 if __name__ == "__main__":
@@ -150,4 +189,5 @@ if __name__ == "__main__":
     test_unknown_tool()
     test_invalid_arguments()
     test_model_ends_without_tools()
-    print("W2 Mock 测试通过（4/4）")
+    test_default_task_id()
+    print("W2 Mock 测试通过（5/5）")
