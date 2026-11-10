@@ -231,3 +231,169 @@ def test_middleware_context_and_message_updates(task_id):
     assert observed_roles == [["user"], ["system", "user", "assistant", "tool"]]
 
 
+# W3 middleware lifecycle and provider-message boundary regression tests
+
+from mini_repo_agent._models import to_api_messages
+from mini_repo_agent.middleware.logging import LoggingMiddleware
+
+
+def test_middleware_order_and_state_visibility():
+    """before hooks run A→B, after hooks B→A; updates are visible downstream."""
+    events = []
+    initial_messages = [{"role": "user", "content": "测试执行顺序"}]
+    final_messages = []
+
+    class MiddlewareA(AgentMiddleware):
+        def before_model(self, state, runtime):
+            events.append("A.before")
+            return {
+                "messages": [
+                    *state["messages"],
+                    {"role": "system", "content": "规则A"},
+                ]
+            }
+
+        def after_model(self, state, runtime):
+            events.append("A.after")
+            assert state["messages"][-1]["verified_by"] == "B"
+            final_messages.extend(state["messages"])
+
+    class MiddlewareB(AgentMiddleware):
+        def before_model(self, state, runtime):
+            events.append("B.before")
+            assert state["messages"][-1]["content"] == "规则A"
+            return {
+                "messages": [
+                    *state["messages"],
+                    {"role": "system", "content": "规则B"},
+                ]
+            }
+
+        def after_model(self, state, runtime):
+            events.append("B.after")
+            last_message = state["messages"][-1]
+            assert last_message["role"] == "assistant"
+            assert last_message["usage_metadata"] == {
+                "input_tokens": 10,
+                "output_tokens": 5,
+            }
+            return {
+                "messages": [
+                    *state["messages"][:-1],
+                    {**last_message, "verified_by": "B"},
+                ]
+            }
+
+    class InspectingModel(FakeModel):
+        def invoke(self, messages, tools):
+            events.append("model")
+            assert [message["content"] for message in messages] == [
+                "测试执行顺序",
+                "规则A",
+                "规则B",
+            ]
+            return super().invoke(messages, tools)
+
+    model = InspectingModel(finish_immediately=True)
+    result = run_react_loop(
+        model,
+        initial_messages,
+        TOOL_SCHEMAS,
+        execute_tool,
+        max_steps=2,
+        middlewares=[MiddlewareA(), MiddlewareB()],
+    )
+
+    assert result == "任务完成"
+    assert events == ["A.before", "B.before", "model", "B.after", "A.after"]
+    assert initial_messages == [{"role": "user", "content": "测试执行顺序"}]
+    assert [message["role"] for message in final_messages] == [
+        "user", "system", "system", "assistant",
+    ]
+
+
+def test_middleware_hooks_run_on_each_model_call():
+    """Hooks run even when the model does not request a tool on its last turn."""
+    observations = []
+
+    class SpyMiddleware(AgentMiddleware):
+        def before_model(self, state, runtime):
+            observations.append(("before", state["messages"][-1]["role"]))
+
+        def after_model(self, state, runtime):
+            observations.append(("after", state["messages"][-1]["role"]))
+
+    def fake_tool(name, raw_arguments):
+        assert name == "list_files"
+        return json.dumps({"ok": True, "result": []})
+
+    result = run_react_loop(
+        FakeModel(),
+        [{"role": "user", "content": "执行测试任务"}],
+        TOOL_SCHEMAS,
+        fake_tool,
+        max_steps=3,
+        middlewares=[SpyMiddleware()],
+    )
+
+    assert result == "任务完成"
+    assert observations == [
+        ("before", "user"),
+        ("after", "assistant"),
+        ("before", "tool"),
+        ("after", "assistant"),
+    ]
+
+
+def test_to_api_messages_drops_internal_metadata_without_mutation():
+    """State metadata must not leak to the DeepSeek request message payload."""
+    messages = [
+        {"role": "user", "content": "你好"},
+        {
+            "role": "assistant",
+            "content": None,
+            "tool_calls": [{"id": "call_1", "function": {"name": "list_files", "arguments": "{}"}, "type": "function"}],
+            "usage_metadata": {"input_tokens": 100, "output_tokens": 20},
+            "verified_by": "B",
+        },
+        {
+            "role": "tool",
+            "tool_call_id": "call_1",
+            "content": '{"ok": true}',
+            "internal_trace_id": "trace-1",
+        },
+    ]
+
+    api_messages = to_api_messages(messages)
+
+    assert api_messages == [
+        {"role": "user", "content": "你好"},
+        {
+            "role": "assistant",
+            "content": None,
+            "tool_calls": messages[1]["tool_calls"],
+        },
+        {"role": "tool", "tool_call_id": "call_1", "content": '{"ok": true}'},
+    ]
+    assert "usage_metadata" in messages[1]
+    assert "verified_by" in messages[1]
+    assert "internal_trace_id" in messages[2]
+
+
+@pytest.mark.parametrize("enabled", [True, False])
+def test_logging_middleware_is_optional(capsys, enabled):
+    with patch(
+        "mini_repo_agent.graph.create_model",
+        return_value=FakeModel(finish_immediately=True),
+    ):
+        agent = create_agent(
+            TOOL_SCHEMAS,
+            execute_tool,
+            max_steps=2,
+            middleware=[LoggingMiddleware()] if enabled else [],
+        )
+
+    assert agent("直接回答") == "任务完成"
+    output = capsys.readouterr().out
+    assert ("[Context]" in output) is enabled
+    assert ("[Tokens]" in output) is enabled
