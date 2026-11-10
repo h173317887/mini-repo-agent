@@ -104,6 +104,8 @@ def run_react_loop(
         if calls:
             assistant_message["tool_calls"] = calls
 
+        messages.append(assistant_message)
+
         for middleware in middlewares or []:
             updates = middleware.after_model(state, runtime)
             if updates is not None:
