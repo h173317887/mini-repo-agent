@@ -7,9 +7,10 @@ from uuid import UUID
 import pytest
 
 from mini_repo_agent.graph import create_agent
-from mini_repo_agent._models import ModelResponse
+from mini_repo_agent._models import ModelResponse, to_api_messages
 from mini_repo_agent._tools import TOOL_SCHEMAS, execute_tool
 from mini_repo_agent.middleware.base import AgentMiddleware
+from mini_repo_agent.middleware.logging import LoggingMiddleware
 from mini_repo_agent.runtime import run_react_loop
 
 
@@ -232,10 +233,6 @@ def test_middleware_context_and_message_updates(task_id):
 
 
 # W3 middleware lifecycle and provider-message boundary regression tests
-
-from mini_repo_agent._models import to_api_messages
-from mini_repo_agent.middleware.logging import LoggingMiddleware
-
 
 def test_middleware_order_and_state_visibility():
     """before hooks run A→B, after hooks B→A; updates are visible downstream."""
