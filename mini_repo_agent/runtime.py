@@ -96,16 +96,23 @@ def run_react_loop(
 
         calls = response.tool_calls or []
 
+        assistant_message = {
+            "role": "assistant",
+            "content": response.content,
+        }
+
+        if calls:
+            assistant_message["tool_calls"] = calls
+
+        for middleware in middlewares or []:
+            updates = middleware.after_model(state, runtime)
+            if updates is not None:
+                state.update(updates)
+
+        messages = state["messages"]
+
         if not calls:
             return response.content or "模型未产生最终答案"
-
-        messages.append(
-            {
-                "role": "assistant",
-                "content": response.content,
-                "tool_calls": calls,
-            }
-        )
 
         for call in calls:
             call_id = call["id"]
