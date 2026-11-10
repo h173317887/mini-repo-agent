@@ -67,7 +67,6 @@ def run_react_loop(
     runtime = MiddlewareRuntime(context=AgentContext(task_id=task_id or ""))
     for step in range(1, max_steps + 1):
         print(f"\n[第 {step} 轮] 调用模型 {model}")
-        print(f"[Context] 当前消息数量：{len(messages)}")
 
         compact_old_tool_results(messages, read_refs, step)
 
