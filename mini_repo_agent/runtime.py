@@ -101,7 +101,7 @@ def run_react_loop(
 
         messages.append(assistant_message)
 
-        for middleware in middlewares or []:
+        for middleware in reversed(middlewares or []):
             updates = middleware.after_model(state, runtime)
             if updates is not None:
                 state.update(updates)
