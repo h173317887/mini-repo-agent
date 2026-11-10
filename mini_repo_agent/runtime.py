@@ -88,17 +88,12 @@ def run_react_loop(
                 }
             )
 
-        if response.usage:
-            print(
-                f"[Tokens] 输入：{response.usage['input_tokens']}, "
-                f"输出：{response.usage['output_tokens']}"
-            )
-
         calls = response.tool_calls or []
 
         assistant_message = {
             "role": "assistant",
             "content": response.content,
+            "usage_metadata": response.usage,
         }
 
         if calls:

@@ -21,7 +21,7 @@ class DeepSeekModel:
     def invoke(self, messages: list[dict], tools: list[dict]):
         response = self.client.chat.completions.create(
             model=self.name,
-            messages=messages,
+            messages=to_api_messages(messages),
             tools=tools,
             extra_body={"thinking": {"type": "disabled"}},
         )
@@ -62,4 +62,19 @@ def create_model() -> DeepSeekModel:
         name=os.getenv("DEEPSEEK_MODEL", "deepseek-flash"),
     )
 
+def to_api_messages(messages: list[dict]) -> list[dict]:
+    allowed_fields = {
+        "system": {"role", "content"},
+        "user": {"role", "content"},
+        "assistant": {"role", "content", "tool_calls"},
+        "tool": {"role", "content", "tool_call_id"},
+    }
 
+    return [
+        {
+            key: value
+            for key, value in message.items()
+            if key in allowed_fields[message["role"]]
+        }
+        for message in messages
+    ]

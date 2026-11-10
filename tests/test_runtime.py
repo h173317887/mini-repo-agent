@@ -163,7 +163,11 @@ def test_model_ends_without_tools():
     assert model.step == 1
     assert messages == [
         {"role": "user", "content": "执行测试任务"},
-        {"role": "assistant", "content": "任务完成"},
+        {
+            "role": "assistant",
+            "content": "任务完成",
+            "usage_metadata": {"input_tokens": 10, "output_tokens": 5},
+        },
     ]
     assert len(trace) == 1
     assert trace[0]["event"] == "model"
