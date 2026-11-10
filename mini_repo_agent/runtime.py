@@ -1,5 +1,7 @@
 import json
 from collections.abc import Callable
+from ._state import AgentState
+from .middleware.base import AgentMiddleware, MiddlewareRuntime
 
 
 def compact_old_tool_results(messages: list, read_refs: dict, current_step: int):
@@ -56,15 +58,24 @@ def run_react_loop(
     max_steps: int,
     trace: list[dict] | None = None,
     task_id: str | None = None,
+    middlewares: list[AgentMiddleware] | None = None
 ) -> str:
     read_refs = {}
+    state: AgentState = {"messages": messages}
+    runtime = MiddlewareRuntime(task_id=task_id or "")
     for step in range(1, max_steps + 1):
         print(f"\n[第 {step} 轮] 调用模型 {model}")
         print(f"[Context] 当前消息数量：{len(messages)}")
 
         compact_old_tool_results(messages, read_refs, step)
-        response = model.invoke(messages, tool_schemas)
 
+        for middleware in middlewares or []:
+            updates = middleware.before_model(state, runtime)
+            if updates is not None: 
+                state.update(updates)
+        messages = state[messages]
+
+        response = model.invoke(messages, tool_schemas)
         if trace is not None:
             trace.append(
                 {
