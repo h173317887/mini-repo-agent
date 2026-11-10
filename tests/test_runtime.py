@@ -4,9 +4,12 @@ import json
 from unittest.mock import patch
 from uuid import UUID
 
+import pytest
+
 from mini_repo_agent.graph import create_agent
 from mini_repo_agent._models import ModelResponse
 from mini_repo_agent._tools import TOOL_SCHEMAS, execute_tool
+from mini_repo_agent.middleware.base import AgentMiddleware
 from mini_repo_agent.runtime import run_react_loop
 
 
@@ -182,5 +185,42 @@ def test_default_task_id():
     assert isinstance(task_id, str)
     assert len(task_id) == 32
     assert UUID(hex=task_id).hex == task_id
+
+
+@pytest.mark.parametrize("task_id", [None, "middleware-task-001"])
+def test_middleware_context_and_message_updates(task_id):
+    instruction = {"role": "system", "content": "中间件添加的指令"}
+    observed_roles = []
+
+    class InstructionMiddleware(AgentMiddleware):
+        def before_model(self, state, runtime):
+            assert runtime.context.task_id == (task_id or "")
+            observed_roles.append([message["role"] for message in state["messages"]])
+            if len(observed_roles) == 1:
+                return {"messages": [instruction, *state["messages"]]}
+            return None
+
+    class InspectingModel(FakeModel):
+        def invoke(self, messages, tools):
+            assert messages[0] == instruction
+            return super().invoke(messages, tools)
+
+    def fake_tool(name, raw_arguments):
+        return json.dumps({"ok": True, "result": []})
+
+    model = InspectingModel()
+    result = run_react_loop(
+        model,
+        [{"role": "user", "content": "执行测试任务"}],
+        TOOL_SCHEMAS,
+        fake_tool,
+        max_steps=3,
+        task_id=task_id,
+        middlewares=[InstructionMiddleware()],
+    )
+
+    assert result == "任务完成"
+    assert model.step == 2
+    assert observed_roles == [["user"], ["system", "user", "assistant", "tool"]]
 
 
