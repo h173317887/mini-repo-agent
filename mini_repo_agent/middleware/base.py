@@ -8,3 +8,6 @@ class AgentMiddleware:
 
     def after_model(self, state: AgentState, runtime: MiddlewareRuntime) -> dict | None:
         return None
+
+    def wrap_model_call(self, request, handler):
+        raise NotImplementedError

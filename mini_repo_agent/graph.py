@@ -6,9 +6,41 @@ from .middleware.base import AgentMiddleware
 from .runtime import run_react_loop
 
 
+def _chain_model_call_handlers(handles):
+    if not handles:
+        return None
+    if len(handles) == 1:
+        return handles[0]
+
+    def compose_two(outer, inner):
+        def composed(request, handler):
+            def inner_handler(req):
+                return inner(req, handler)
+
+            return outer(request, inner_handler)
+
+        return composed
+
+    composed_handler = compose_two(handles[-2], handles[-1])
+
+    for h in reversed(handles[:-2]):
+        composed_handler = compose_two(h, composed_handler)
+
+    return composed_handler
+
+
 def create_agent(tool_schema: list[dict], execute_tool, max_steps: int, middleware: list[AgentMiddleware] | None = None):
     # 从项目根目录读取 .env；已经存在的进程环境变量优先。
     model = create_model()
+
+    handlers = [
+        m.wrap_model_call
+        for m in middleware or []
+        if m.__class__.wrap_model_call is not AgentMiddleware.wrap_model_call
+    ]
+
+    wrap_model_call_handler = _chain_model_call_handlers(handlers)
+
     def invoke(task, trace: list[dict] | None = None, task_id: str | None = None):
         if task_id is None:
             task_id = uuid4().hex
@@ -20,6 +52,16 @@ def create_agent(tool_schema: list[dict], execute_tool, max_steps: int, middlewa
             },
             {"role": "user", "content": task},
         ]
-        return run_react_loop(model, messages, tool_schema, execute_tool, max_steps, trace=trace, task_id=task_id, middlewares=middleware)
+        return run_react_loop(
+            model,
+            messages,
+            tool_schema,
+            execute_tool,
+            max_steps,
+            trace=trace,
+            task_id=task_id,
+            middlewares=middleware,
+            wrap_model_call_handler=wrap_model_call_handler,
+        )
 
     return invoke

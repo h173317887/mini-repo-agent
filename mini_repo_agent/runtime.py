@@ -52,6 +52,10 @@ def compact_old_tool_results(messages: list, read_refs: dict, current_step: int)
         print(f"[Compact] {path}: {before} -> {after} 字符")
 
 
+def _execute_model_sync(request):
+    return request["model"].invoke(request["messages"], request["tools"])
+
+
 def run_react_loop(
     model,
     messages,
@@ -61,10 +65,15 @@ def run_react_loop(
     trace: list[dict] | None = None,
     task_id: str | None = None,
     middlewares: list[AgentMiddleware] | None = None,
+    wrap_model_call_handler=None,
+    execute_model=None,
 ) -> str:
     read_refs = {}
     state: AgentState = {"messages": messages}
     runtime = MiddlewareRuntime(context=AgentContext(task_id=task_id or ""))
+    if execute_model is None:
+        execute_model = _execute_model_sync
+
     for step in range(1, max_steps + 1):
         print(f"\n[第 {step} 轮] 调用模型 {model}")
 
@@ -76,7 +85,17 @@ def run_react_loop(
                 state.update(updates)
         messages = state["messages"]
 
-        response = model.invoke(messages, tool_schemas)
+        request = {
+            "model": model,
+            "messages": messages,
+            "tools": tool_schemas,
+        }
+
+        if wrap_model_call_handler is None:
+            response = execute_model(request)
+        else:
+            response = wrap_model_call_handler(request, execute_model)
+
         if trace is not None:
             trace.append(
                 {
