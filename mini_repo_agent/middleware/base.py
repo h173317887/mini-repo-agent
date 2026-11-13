@@ -11,3 +11,6 @@ class AgentMiddleware:
 
     def wrap_model_call(self, request, handler):
         raise NotImplementedError
+
+    def wrap_tool_call(self, request, handler):
+        raise NotImplementedError

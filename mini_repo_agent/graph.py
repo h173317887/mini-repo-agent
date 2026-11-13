@@ -29,6 +29,29 @@ def _chain_model_call_handlers(handles):
     return composed_handler
 
 
+def _chain_tool_call_wrappers(wrappers):
+    if not wrappers:
+        return None
+
+    if len(wrappers) == 1:
+        return wrappers[0]
+
+    def compose_two(outer, inner):
+        def composed(request, execute):
+            def inner_handler(req):
+                return inner(req, execute)
+
+            return outer(request, inner_handler);
+
+        return composed;
+
+    result = wrappers[-1]
+
+    for wrapper in reversed(wrappers[:-1]):
+        result = compose_two(wrapper, result)
+
+    return result
+
 def create_agent(tool_schema: list[dict], execute_tool, max_steps: int, middleware: list[AgentMiddleware] | None = None):
     # 从项目根目录读取 .env；已经存在的进程环境变量优先。
     model = create_model()
