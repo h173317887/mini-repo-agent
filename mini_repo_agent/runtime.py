@@ -56,6 +56,21 @@ def _execute_model_sync(request):
     return request["model"].invoke(request["messages"], request["tools"])
 
 
+def _execute_tool_sync(request, execute_tool):
+    call = request["tool_call"]
+
+    result = execute_tool(
+        call["name"],
+        call["raw_arguments"],
+    )
+
+    return {
+        "role": "tool",
+        "tool_call_id": call["id"],
+        "content": result,
+    }
+
+
 def run_react_loop(
     model,
     messages,
@@ -67,12 +82,16 @@ def run_react_loop(
     middlewares: list[AgentMiddleware] | None = None,
     wrap_model_call_handler=None,
     execute_model=None,
+    wrap_tool_call_handler=None,
 ) -> str:
     read_refs = {}
     state: AgentState = {"messages": messages}
     runtime = MiddlewareRuntime(context=AgentContext(task_id=task_id or ""))
     if execute_model is None:
         execute_model = _execute_model_sync
+
+    def execute(req):
+        return _execute_tool_sync(req, execute_tool)
 
     for step in range(1, max_steps + 1):
         print(f"\n[第 {step} 轮] 调用模型 {model}")
@@ -136,7 +155,29 @@ def run_react_loop(
             raw_args = call["function"]["arguments"]
 
             print(f"  [Action] {name}({raw_args})")
-            result = execute_tool(name, raw_args)
+            tool_request = {
+                "tool_call": {
+                    "id": call_id,
+                    "name": name,
+                    "raw_arguments": raw_args,
+                },
+                "state": state,
+                "runtime": runtime,
+            }
+
+            if wrap_tool_call_handler is None:
+                tool_message = execute(tool_request)
+            else:
+                tool_message = wrap_tool_call_handler(
+                    tool_request,
+                    execute,
+                )
+            if (
+                tool_message["role"] != "tool"
+                or tool_message["tool_call_id"] != call_id
+            ):
+                raise ValueError("工具返回消息与当前 tool_call_id 不匹配")
+            result = tool_message["content"]
 
             if trace is not None:
                 trace.append(
@@ -158,12 +199,6 @@ def run_react_loop(
                     pass
 
             print(f"  [Observation] {result[:350]}")
-            messages.append(
-                {
-                    "role": "tool",
-                    "tool_call_id": call_id,
-                    "content": result,
-                }
-            )
+            messages.append(tool_message)
 
     return "达到最大轮数，停止执行（不能据此认定任务成功）"

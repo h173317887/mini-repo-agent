@@ -64,6 +64,14 @@ def create_agent(tool_schema: list[dict], execute_tool, max_steps: int, middlewa
 
     wrap_model_call_handler = _chain_model_call_handlers(handlers)
 
+    tool_wrappers = [
+        m.wrap_tool_call
+        for m in middleware or []
+        if m.__class__.wrap_tool_call is not AgentMiddleware.wrap_tool_call
+    ]
+
+    wrap_tool_call_handler = _chain_tool_call_wrappers(tool_wrappers)
+
     def invoke(task, trace: list[dict] | None = None, task_id: str | None = None):
         if task_id is None:
             task_id = uuid4().hex
@@ -85,6 +93,7 @@ def create_agent(tool_schema: list[dict], execute_tool, max_steps: int, middlewa
             task_id=task_id,
             middlewares=middleware,
             wrap_model_call_handler=wrap_model_call_handler,
+            wrap_tool_call_handler=wrap_tool_call_handler
         )
 
     return invoke
