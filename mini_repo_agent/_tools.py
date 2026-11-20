@@ -1,3 +1,4 @@
+import inspect
 import json
 from pathlib import Path
 
@@ -51,9 +52,10 @@ def execute_tool(name: str, raw_arguments: str) -> str:
         arguments = json.loads(raw_arguments or "{}")
         if not isinstance(arguments, dict):
             raise TypeError("工具参数必须是 JSON 对象")
-        result = TOOL_HANDLERS[name](**arguments)
-        return json.dumps({"ok": True, "result": result}, ensure_ascii=False)
-    except (ValueError, TypeError, OSError, UnicodeError) as exc:
+        handler = TOOL_HANDLERS[name]
+        inspect.signature(handler).bind(**arguments)
+
+    except (ValueError, TypeError) as exc:
         return json.dumps(
             {
                 "ok": False,
@@ -64,6 +66,9 @@ def execute_tool(name: str, raw_arguments: str) -> str:
             },
             ensure_ascii=False,
         )
+
+    result = handler(**arguments)
+    return json.dumps({"ok": True, "result": result}, ensure_ascii=False)
 
 
 TOOL_HANDLERS = {"list_files": list_files, "read_file": read_file}
