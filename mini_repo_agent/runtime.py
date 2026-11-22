@@ -63,10 +63,18 @@ def _execute_tool_sync(request, execute_tool):
         call["name"],
         call["raw_arguments"],
     )
+    try:
+        data = json.loads(result)
+    except (json.JSONDecodeError, TypeError):
+        data = None
 
+    status = (
+        "error" if isinstance(data, dict) and data.get("ok") is False else "success"
+    )
     return {
         "role": "tool",
         "tool_call_id": call["id"],
+        "status": status,
         "content": result,
     }
 
@@ -109,11 +117,35 @@ def run_react_loop(
             "messages": messages,
             "tools": tool_schemas,
         }
-
-        if wrap_model_call_handler is None:
-            response = execute_model(request)
-        else:
-            response = wrap_model_call_handler(request, execute_model)
+        try:
+            if wrap_model_call_handler is None:
+                response = execute_model(request)
+            else:
+                response = wrap_model_call_handler(request, execute_model)
+        except KeyboardInterrupt:
+            if trace is not None:
+                trace.append(
+                    {
+                        "event": "cancelled",
+                        "stage": "model",
+                        "task_id": task_id,
+                        "step": step,
+                    }
+                )
+            raise
+        except Exception as exc:
+            if trace is not None:
+                trace.append(
+                    {
+                        "event": "model_error",
+                        "task_id": task_id,
+                        "step": step,
+                        "model": model.name,
+                        "error_type": type(exc).__name__,
+                        "error": str(exc),
+                    }
+                )
+            raise
 
         if trace is not None:
             trace.append(
@@ -164,20 +196,48 @@ def run_react_loop(
                 "state": state,
                 "runtime": runtime,
             }
+            try:
+                if wrap_tool_call_handler is None:
+                    tool_message = execute(tool_request)
+                else:
+                    tool_message = wrap_tool_call_handler(
+                        tool_request,
+                        execute,
+                    )
+                if (
+                    tool_message["role"] != "tool"
+                    or tool_message["tool_call_id"] != call_id
+                ):
+                    raise ValueError("工具返回消息与当前 tool_call_id 不匹配")
+                result = tool_message["content"]
+            except KeyboardInterrupt:
+                if trace is not None:
+                    trace.append(
+                        {
+                            "event": "cancelled",
+                            "stage": "tool",
+                            "task_id": task_id,
+                            "step": step,
+                            "call_id": call_id,
+                            "name": name,
+                        }
+                    )
+                raise
 
-            if wrap_tool_call_handler is None:
-                tool_message = execute(tool_request)
-            else:
-                tool_message = wrap_tool_call_handler(
-                    tool_request,
-                    execute,
-                )
-            if (
-                tool_message["role"] != "tool"
-                or tool_message["tool_call_id"] != call_id
-            ):
-                raise ValueError("工具返回消息与当前 tool_call_id 不匹配")
-            result = tool_message["content"]
+            except Exception as exc:
+                if trace is not None:
+                    trace.append(
+                        {
+                            "event": "tool_error",
+                            "task_id": task_id,
+                            "step": step,
+                            "call_id": call_id,
+                            "name": name,
+                            "error_type": type(exc).__name__,
+                            "error": str(exc),
+                        }
+                    )
+                raise
 
             if trace is not None:
                 trace.append(
@@ -189,6 +249,7 @@ def run_react_loop(
                         "result": result,
                         "event": "tool",
                         "task_id": task_id,
+                        "status": tool_message.get("status", "success"),
                     }
                 )
             if name == "read_file":

@@ -14,6 +14,7 @@ class ToolErrorMiddleware(AgentMiddleware):
             return {
                 "role": "tool",
                 "tool_call_id": request["tool_call"]["id"],
+                "status": "error",
                 "content": json.dumps(
                     {
                         "ok": False,
