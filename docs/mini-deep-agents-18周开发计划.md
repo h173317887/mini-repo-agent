@@ -122,17 +122,16 @@
 
 ### 阶段 C：迁移 LangChain / LangGraph 与文件能力（W5–W6，共 48h）
 
-#### W5｜11/30–12/06｜正式迁移：LangChain create_agent + LangGraph Runtime
+#### W5｜11/30–12/06｜对齐 Deep Agents 组装入口并迁移 LangChain / LangGraph Runtime
 
-**源码参照：** Deep Agents `graph.py` 的 `create_deep_agent() → langchain.agents.create_agent()`；LangChain `create_agent` / `AgentMiddleware`；LangGraph 的状态图执行机制。
+**源码参照：** Deep Agents `graph.py` 中 `create_deep_agent() → langchain.agents.create_agent()` 的组装流程、`_models.py` / `_tools.py`；必要时追踪 LangChain `create_agent` / `AgentMiddleware` / LangGraph 实现。开发时同时遵守 [每周开发约束](./每周开发约束.md)。
 
 **任务：**
-1. 固定 `langchain`、`langchain-openai`、`langgraph` 等版本；用官方聊天模型封装连接 DeepSeek（例如配置 `ChatOpenAI` 的 `base_url`）；确认模型、Tool Calls 和 usage 的语义。
-2. 将 `TOOL_SCHEMAS` / handler 映射为 LangChain Tools，保留现有只读工作区限制；在 `graph.py` 使用 `create_agent(model, tools=..., middleware=...)` 组装正式 Agent，不直接调用 `deepagents.create_deep_agent()`。
-3. 将 W3–W4 中有价值的日志/拦截逻辑迁移到真正的 `AgentMiddleware`；用框架提供的 State / Runtime 结构替换教学版的自定义状态约定。
-4. 迁移 CLI 入口并跑同一组 Mock 回归和真实只读任务，核查工具成功/未知工具/坏参数、结束条件、Middleware 次序及可观察的调用轨迹；记录与手写版的行为差异。
+1. **源码对齐与接口设计**：先核对官方入口的目录职责、函数名、参数顺序、签名与调用链；在本项目 `graph.py` 中实现同名 `create_deep_agent()`，由外部传入 `model`、`tools`、`system_prompt`、`middleware`，并委托 LangChain `create_agent()` 创建执行图。只保留当前实现真正支持的参数；不自行另设正式组装入口。
+2. **迁移模型、工具与 Middleware**：固定依赖版本，接入 LangChain ChatModel（DeepSeek）、Tools 和官方 `AgentMiddleware`，迁移 W3–W4 的必要日志、异常拦截与状态交互；遵循 Deep Agents 对应层的命名与职责，保留只读工作区限制，不重写 LangGraph Runtime。
+3. **切换正式入口并回归**：CLI 调用 `create_deep_agent()` 返回的 Agent；用既有 Mock 轨迹与真实多文件分析任务验证工具调用/结果配对、错误处理、Middleware 次序、最终回答与 usage/trace。旧手写 `runtime.py` 仅作教学对照，退出正式执行链。
 
-**交付 / 验收：** 正式入口执行 LangChain Agent（底层 LangGraph）；回归通过且能分析执行图节点、模型调用和 Tool 节点。原 `runtime.py` 仅作为教学对照实现，可移入 `legacy/` 或保持隔离，但不可在正式运行路径中继续调用。
+**交付 / 验收：** 正式入口经 `create_deep_agent() → langchain.agents.create_agent()` 返回可执行 LangGraph Agent，完成只读仓库分析；记录官方源码与本项目的接口/职责对照及有意简化之处。Backend、FilesystemMiddleware、Skills、Subagents 仍按 W6 及后续周次实现，不提前创建空壳。
 
 #### W6｜12/07–12/13｜Backend Protocol + FilesystemMiddleware
 
