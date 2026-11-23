@@ -3,7 +3,16 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from dotenv import load_dotenv
+from langchain.chat_models import init_chat_model
+from langchain_core.language_models import BaseChatModel
 from openai import OpenAI
+
+
+def resolve_model(model: str | BaseChatModel) -> BaseChatModel:
+    if isinstance(model, BaseChatModel):
+        return model
+
+    return init_chat_model(model)
 
 
 @dataclass
@@ -33,7 +42,7 @@ class DeepSeekModel:
                 "input_tokens": response.usage.prompt_tokens,
                 "output_tokens": response.usage.completion_tokens,
             }
-        
+
         return ModelResponse(
             content=message.content,
             tool_calls=[
@@ -51,7 +60,6 @@ def create_model() -> DeepSeekModel:
     if not api_key:
         raise ValueError("未找到 DEEPSEEK_API_KEY")
 
-
     client = OpenAI(
         api_key=api_key,
         base_url=os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com"),
@@ -61,6 +69,7 @@ def create_model() -> DeepSeekModel:
         client=client,
         name=os.getenv("DEEPSEEK_MODEL", "deepseek-flash"),
     )
+
 
 def to_api_messages(messages: list[dict]) -> list[dict]:
     allowed_fields = {

@@ -1,7 +1,15 @@
-
+from collections.abc import Callable, Sequence
+from typing import Any
 from uuid import uuid4
 
-from ._models import create_model
+from langchain.agents import create_agent as lc_create_agent
+from langchain.agents.middleware import AgentMiddleware
+from langchain_core.language_models import BaseChatModel
+from langchain_core.messages import SystemMessage
+from langchain_core.tools import BaseTool
+from langgraph.graph.state import CompiledStateGraph
+
+from ._models import create_model, resolve_model
 from .middleware.base import AgentMiddleware
 from .runtime import run_react_loop
 
@@ -41,9 +49,9 @@ def _chain_tool_call_wrappers(wrappers):
             def inner_handler(req):
                 return inner(req, execute)
 
-            return outer(request, inner_handler);
+            return outer(request, inner_handler)
 
-        return composed;
+        return composed
 
     result = wrappers[-1]
 
@@ -52,7 +60,13 @@ def _chain_tool_call_wrappers(wrappers):
 
     return result
 
-def create_agent(tool_schema: list[dict], execute_tool, max_steps: int, middleware: list[AgentMiddleware] | None = None):
+
+def create_agent(
+    tool_schema: list[dict],
+    execute_tool,
+    max_steps: int,
+    middleware: list[AgentMiddleware] | None = None,
+):
     # 从项目根目录读取 .env；已经存在的进程环境变量优先。
     model = create_model()
 
@@ -93,7 +107,24 @@ def create_agent(tool_schema: list[dict], execute_tool, max_steps: int, middlewa
             task_id=task_id,
             middlewares=middleware,
             wrap_model_call_handler=wrap_model_call_handler,
-            wrap_tool_call_handler=wrap_tool_call_handler
+            wrap_tool_call_handler=wrap_tool_call_handler,
         )
 
     return invoke
+
+
+def create_deep_agent(
+    model: str | BaseChatModel,
+    tools: Sequence[BaseTool | Callable | dict[str, Any]] | None = None,
+    *,
+    system_prompt: str | SystemMessage | None = None,
+    middleware: Sequence[AgentMiddleware] = (),
+) -> CompiledStateGraph:
+    model = resolve_model(model)
+
+    return lc_create_agent(
+        model,
+        tools=tools,
+        system_prompt=system_prompt,
+        middleware=middleware,
+    )
