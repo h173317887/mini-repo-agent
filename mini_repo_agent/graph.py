@@ -10,7 +10,7 @@ from langchain_core.tools import BaseTool
 from langgraph.graph.state import CompiledStateGraph
 
 from ._models import create_model, resolve_model
-from .middleware.base import AgentMiddleware
+from .middleware.base import AgentMiddleware as LegacyAgentMiddleware
 from .runtime import run_react_loop
 
 
@@ -65,7 +65,7 @@ def create_agent(
     tool_schema: list[dict],
     execute_tool,
     max_steps: int,
-    middleware: list[AgentMiddleware] | None = None,
+    middleware: list[LegacyAgentMiddleware] | None = None,
 ):
     # 从项目根目录读取 .env；已经存在的进程环境变量优先。
     model = create_model()
@@ -73,7 +73,7 @@ def create_agent(
     handlers = [
         m.wrap_model_call
         for m in middleware or []
-        if m.__class__.wrap_model_call is not AgentMiddleware.wrap_model_call
+        if m.__class__.wrap_model_call is not LegacyAgentMiddleware.wrap_model_call
     ]
 
     wrap_model_call_handler = _chain_model_call_handlers(handlers)
@@ -81,7 +81,7 @@ def create_agent(
     tool_wrappers = [
         m.wrap_tool_call
         for m in middleware or []
-        if m.__class__.wrap_tool_call is not AgentMiddleware.wrap_tool_call
+        if m.__class__.wrap_tool_call is not LegacyAgentMiddleware.wrap_tool_call
     ]
 
     wrap_tool_call_handler = _chain_tool_call_wrappers(tool_wrappers)
