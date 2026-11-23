@@ -7,11 +7,20 @@ Run from the repository root:
 import os
 
 from dotenv import load_dotenv
+from langchain.agents.middleware import ToolErrorMiddleware
 from langchain_core.messages import AIMessage, ToolMessage
 from langchain_openai import ChatOpenAI
 
 from mini_repo_agent.graph import create_deep_agent
 from mini_repo_agent.langchain_tools import TOOLS
+from mini_repo_agent.middleware.logging import LangChainLoggingMiddleware
+
+
+def on_tool_error(exc, request):
+    if isinstance(exc, OSError):
+        return f"{type(exc).__name__}: 文件操作失败，请检查路径"
+
+    return None
 
 
 def main() -> None:
@@ -31,6 +40,13 @@ def main() -> None:
         model=model,
         tools=TOOLS,
         system_prompt="你是只读代码分析助手，需要事实时必须先读取文件。",
+        middleware=[
+            LangChainLoggingMiddleware(),
+            ToolErrorMiddleware(
+                on_error=on_tool_error,
+                tools=["read_file", "list_files"],
+            ),
+        ],
     )
 
     result = agent.invoke(
