@@ -7,12 +7,12 @@ import pytest
 
 from tests.test_runtime import FakeModel
 from mini_repo_agent._tools import TOOL_SCHEMAS
-from mini_repo_agent.graph import create_agent
+from mini_repo_agent.legacy.graph import create_agent
 from mini_repo_agent.middleware.base import AgentMiddleware
 
 
 def make_agent(model, executor, middlewares):
-    with patch("mini_repo_agent.graph.create_model", return_value=model):
+    with patch("mini_repo_agent.legacy.graph.create_model", return_value=model):
         return create_agent(TOOL_SCHEMAS, executor, max_steps=3, middleware=middlewares)
 
 

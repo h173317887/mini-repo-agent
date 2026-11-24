@@ -6,12 +6,12 @@ from uuid import UUID
 
 import pytest
 
-from mini_repo_agent.graph import create_agent
+from mini_repo_agent.legacy.graph import create_agent
 from mini_repo_agent._models import ModelResponse, to_api_messages
 from mini_repo_agent._tools import TOOL_SCHEMAS, execute_tool
 from mini_repo_agent.middleware.base import AgentMiddleware
 from mini_repo_agent.middleware.logging import LoggingMiddleware
-from mini_repo_agent.runtime import run_react_loop
+from mini_repo_agent.legacy.runtime import run_react_loop
 
 
 class FakeModel:
@@ -179,7 +179,7 @@ def test_model_ends_without_tools():
 def test_default_task_id():
     # Patch only agent assembly; the Runtime still executes normally.
     with patch(
-        "mini_repo_agent.graph.create_model",
+        "mini_repo_agent.legacy.graph.create_model",
         return_value=FakeModel(finish_immediately=True),
     ):
         agent = create_agent(TOOL_SCHEMAS, execute_tool, max_steps=3)
@@ -380,7 +380,7 @@ def test_to_api_messages_drops_internal_metadata_without_mutation():
 @pytest.mark.parametrize("enabled", [True, False])
 def test_logging_middleware_is_optional(capsys, enabled):
     with patch(
-        "mini_repo_agent.graph.create_model",
+        "mini_repo_agent.legacy.graph.create_model",
         return_value=FakeModel(finish_immediately=True),
     ):
         agent = create_agent(

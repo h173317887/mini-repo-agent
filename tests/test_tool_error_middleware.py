@@ -7,7 +7,7 @@ import pytest
 
 from mini_repo_agent._models import ModelResponse
 from mini_repo_agent._tools import TOOL_SCHEMAS, execute_tool
-from mini_repo_agent.graph import create_agent
+from mini_repo_agent.legacy.graph import create_agent
 from mini_repo_agent.middleware.base import AgentMiddleware
 from mini_repo_agent.middleware.tool_error import ToolErrorMiddleware
 
@@ -41,7 +41,7 @@ class TwoStepModel:
 
 
 def agent_for(model, tool_executor=execute_tool, middlewares=()):
-    with patch("mini_repo_agent.graph.create_model", return_value=model):
+    with patch("mini_repo_agent.legacy.graph.create_model", return_value=model):
         return create_agent(TOOL_SCHEMAS, tool_executor, max_steps=3, middleware=list(middlewares))
 
 
