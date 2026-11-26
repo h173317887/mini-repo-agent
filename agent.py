@@ -1,12 +1,14 @@
 import os
 import sys
+from pathlib import Path
 
 from dotenv import load_dotenv
 from langchain.agents.middleware import ToolErrorMiddleware
 from langchain_deepseek import ChatDeepSeek
 
+from mini_repo_agent.backends.filesystem import FilesystemBackend
 from mini_repo_agent.graph import create_deep_agent
-from mini_repo_agent.langchain_tools import TOOLS
+from mini_repo_agent.middleware.filesystem import FilesystemMiddleware
 from mini_repo_agent.middleware.logging import LangChainLoggingMiddleware
 
 
@@ -28,16 +30,17 @@ def main():
         ),
         extra_body={"thinking": {"type": "disabled"}},
     )
-
+    workspace = Path(__file__).resolve().parent / "workspace"
+    backend = FilesystemBackend(workspace)
     agent = create_deep_agent(
         model=model,
-        tools=TOOLS,
         system_prompt=(
             "你是一个只读代码分析助手。需要事实时先用工具检查文件，不得猜测文件内容。"
         ),
         middleware=[
             LangChainLoggingMiddleware(),
             ToolErrorMiddleware(on_error=on_tool_error),
+            FilesystemMiddleware(backend),
         ],
     )
 
