@@ -34,9 +34,9 @@ ReadResult 等结构化结果 → ToolMessage → Agent
 - [ ] 将现有 `_tools.py` 的路径校验、列文件、读文件逻辑迁入 `FilesystemBackend`。
 - [ ] 实现最小 `FilesystemMiddleware`，由它注册文件 Tools；不再由正式入口重复注册旧文件工具。
 - [ ] 增加**代码搜索或按行读取**能力，能够定位未知文件里的函数。
-- [ ] 完成安全边界测试，并准备 4–5 条带预期路径/行号证据的 Agent 评估任务。
+- [ ] 完成安全边界、分页、工具消息配对和调用链的软件回归测试；可使用固定脚本化 Fake Model 验证路径和行号，但不进行真实 Agent 能力评分。
 
-**验收**：Agent 能在 `workspace/` 内查找、读取并引用正确文件和行号；越界、隐藏文件及非法路径被拒绝；旧版与新版回归测试不受影响。
+**验收**：Agent 能在 `workspace/` 内查找、读取并引用正确文件和行号；越界、隐藏文件及非法路径被拒绝；旧版与新版回归测试不受影响。已提交的 `evals/w6_cases.json` 与 `tests/test_w6_agent_eval.py` 为固定工具轨迹的软件回归测试，不计为真实 Agent 任务评估；集中评估与组件消融放在 W17–W18。
 
 **本周不做**：`write/edit/delete/execute`、远程存储、生产级沙盒、重写 LangGraph Runtime，以及 W7 的上下文压缩。
 
