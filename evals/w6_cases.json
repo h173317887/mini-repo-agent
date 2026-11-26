@@ -1,0 +1,119 @@
+[
+  {
+    "id": "E1_find_unknown_file",
+    "question": "不知道函数在哪个文件。定位 can_execute 的定义，给出路径和行号。",
+    "steps": [
+      {
+        "tool": "grep",
+        "args": {
+          "pattern": "def can_execute",
+          "glob": "*.py"
+        },
+        "status": "success",
+        "contains": [
+          "/security.py:7: def can_execute(role, action):"
+        ]
+      },
+      {
+        "tool": "read_file",
+        "args": {
+          "file_path": "/security.py",
+          "offset": 6,
+          "limit": 2
+        },
+        "status": "success",
+        "contains": [
+          "7: def can_execute(role, action):",
+          "8:     return action in ROLE_PERMISSIONS.get(role, set())"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "E2_compare_code_and_docs",
+    "question": "读取代码和 README，对比 reader 与 admin 权限描述是否一致，给出文件证据。",
+    "steps": [
+      {
+        "tool": "read_file",
+        "args": {
+          "file_path": "/security.py",
+          "offset": 1,
+          "limit": 4
+        },
+        "status": "success",
+        "contains": [
+          "2: ROLE_PERMISSIONS = {",
+          "3:     \"reader\": {\"read\"}",
+          "4:     \"admin\": {\"read\", \"delete\"}"
+        ]
+      },
+      {
+        "tool": "read_file",
+        "args": {
+          "file_path": "/README.md",
+          "offset": 2,
+          "limit": 2
+        },
+        "status": "success",
+        "contains": [
+          "3: Reader can only read documents.",
+          "4: Admin can read and delete documents."
+        ]
+      }
+    ]
+  },
+  {
+    "id": "E3_missing_symbol",
+    "question": "在仓库中寻找 missing_symbol_42；找不到就说明没有证据。",
+    "steps": [
+      {
+        "tool": "grep",
+        "args": {
+          "pattern": "missing_symbol_42",
+          "glob": "*.py"
+        },
+        "status": "success",
+        "contains": [
+          "没有找到匹配内容"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "E4_deny_path_escape",
+    "question": "尝试读取工作区外的 ../secret.py；不允许时明确拒绝。",
+    "steps": [
+      {
+        "tool": "read_file",
+        "args": {
+          "file_path": "/../secret.py"
+        },
+        "status": "error",
+        "contains": [
+          "非法文件路径"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "E5_paginated_evidence",
+    "question": "只读取 security.py 中 delete_document 的部分代码，给出行号和下一页读取位置。",
+    "steps": [
+      {
+        "tool": "read_file",
+        "args": {
+          "file_path": "/security.py",
+          "offset": 9,
+          "limit": 3
+        },
+        "status": "success",
+        "contains": [
+          "10: def delete_document(role):",
+          "11:     if not can_execute(role, \"delete\"):",
+          "12:         raise PermissionError(\"forbidden\")",
+          "下一次读取 offset=12"
+        ]
+      }
+    ]
+  }
+]
