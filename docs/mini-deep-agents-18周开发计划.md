@@ -148,17 +148,21 @@
 
 ### 阶段 D：Context Engineering（W7–W9，共 72h）
 
-#### W7｜12/14–12/20｜官方 Middleware 上的 Token Budget 与基础 Summarization
+#### W7｜12/14–12/20｜Context Budget、消息状态与基础 SummarizationMiddleware
 
-**源码参照：** `middleware/summarization.py`、消息历史管理。
+**源码参照：** Deep Agents `middleware/summarization.py`（主要是 `wrap_model_call`、`request.override`、摘要事件与保留原始消息）；LangChain `agents/middleware/summarization.py`（主要是 `before_model`、`RemoveMessage`、`trigger`、`keep`、安全消息裁剪），以及 LangChain / LangGraph 的消息 State 更新语义。
+
+**核心问题：** Context Window / Token Budget 管理的是“本轮实际发送给模型的有效上下文”，不等同于全部原始历史；为什么不能简单按条数截断消息；为什么 Deep Agents 要把摘要事件与原始历史分开保存？
 
 **任务：**
-1. 在官方 Agent Runtime 中编写 SummarizationMiddleware，参考旧版重复 Observation 压缩理解机制差异；遵守 LangChain 消息/状态更新规则，不直接就地修改状态消息。
-2. 增加输入 Token 估算 / API usage 记录、预算阈值与触发规则。
-3. 设计工具结果过长时的可控截断或外存策略入口，避免失去整个工具响应。
-4. 测试多轮请求中消息协议完整、不会出现“有工具调用但缺工具结果”。
+1. **先对齐官方两层设计**：读 LangChain 基础 SummarizationMiddleware 与 Deep Agents 扩展实现，明确 `before_model` 更新消息 State 与 `wrap_model_call` 通过 `request.override(messages=...)` 调整本次模型输入的差异；熟悉 `state["messages"]`、`request.messages`、摘要事件和实际模型输入的职责边界。
+2. **学习 Budget 与触发/保留策略**：区分模型上下文窗口、输入 Token 估算与模型响应后的 `usage_metadata`；理解 `trigger` / `keep` 的作用，选一个适合当前简化版本的触发规则，不在 W7 实现完整的模型 Provider 兼容与精确 Token 计费。
+3. **实现最小 SummarizationMiddleware**：沿用官方 `AgentMiddleware` 及 `wrap_model_call(request, handler)` 扩展点，完成“判断阈值 → 选择可安全裁剪的旧消息 → 生成最小摘要 → 保留近期消息 → 更新本轮有效请求 → 继续调用模型”的路径；保持不直接就地修改 `state["messages"]`，摘要状态按当前阶段最小化，并明确与官方完整摘要事件机制的差距。
+4. **保证 AI/Tool 消息配对**：重点理解不能把带 `tool_calls` 的 `AIMessage` 和对应 `ToolMessage` 切开；为触发/不触发、消息边界、摘要后继续执行及错误处理补充必要的 Mock/单元/集成测试。
 
-**交付 / 验收：** Context 管理由独立 LangChain Middleware 负责；预算触发后 Agent 仍能保持合法消息协议并继续执行。
+**本周边界：** 不做任务感知摘要内容优化（W8）；不实现完整的历史文件外存、工具大结果外存/回读或缓存成本优化（W9）；不在只读 Backend 上提前加入写入接口；不开展 Agent 能力评估或消融实验（W17–W18）。
+
+**交付 / 验收：** `middleware/summarization.py` 可通过正式 `create_deep_agent()` 组合接入；达到阈值时能构造有效压缩上下文并继续模型调用，不触发时不改变请求；保留合法的 AI/Tool 配对；能解释 LangChain 与 Deep Agents 在历史状态处理上的设计区别。
 
 #### W8｜12/21–12/27｜Task-aware Compression
 
